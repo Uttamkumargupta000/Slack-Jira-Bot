@@ -1,8 +1,6 @@
 import { Controller, Post, Body } from '@nestjs/common';
 import { SlackService } from './slack.service';
 import { SlackEventDto } from './dto/slack-event.dto';
-// import { SlackEventDataDto } from './dto/slack-event.dto'; 
-
 
 @Controller('slack')
 export class SlackController {  
