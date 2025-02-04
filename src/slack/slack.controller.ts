@@ -1,9 +1,11 @@
 import { Controller, Post, Body } from '@nestjs/common';
 import { SlackService } from './slack.service';
 import { SlackEventDto } from './dto/slack-event.dto';
+// import { SlackEventDataDto } from './dto/slack-event.dto'; 
+
 
 @Controller('slack')
-export class SlackController {
+export class SlackController {  
   constructor(private readonly slackService: SlackService) {}
 
   @Post('events')
@@ -16,7 +18,7 @@ export class SlackController {
     }
 
     // Handling message events
-    if (body.event?.type === 'message') {
+    if (body.event?.type === 'message'&& body.event?.bot_id) {
       return this.slackService.respondToMessage(body.event);
     }
 
