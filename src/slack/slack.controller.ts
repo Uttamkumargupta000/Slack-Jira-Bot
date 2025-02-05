@@ -23,7 +23,7 @@ export class SlackController {
       console.log('New Message Event : ', slackEventDto.event);
       await this.slackService.sendMessage(
         slackEventDto.event.channel,
-        ` Received Your Message: ${slackEventDto.event.text}`,
+        ` Received Your Message: ${slackEventDto.event.text}  will get back your reply soon`,
       );
     }
     return { status: 'ok' };
