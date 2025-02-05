@@ -1,27 +1,32 @@
 import { Controller, Post, Body } from '@nestjs/common';
 import { SlackService } from './slack.service';
-import { SlackEventDto } from './dto/slack-event.dto';
+import { SlackEventDto } from './dto/slack.event.dto';
 
 @Controller('slack')
 export class SlackController {  
   constructor(private readonly slackService: SlackService) {}
 
   @Post('events')
-  async handleSlackEvent(@Body() body: SlackEventDto) {
-    console.log('sent the webhook url')
-
-    // Slack URL verification 
-    if (body.challenge) {
-      return { challenge: body.challenge };
+  async handleEventFromSlack(@Body() slackEventDto: SlackEventDto) {
+    if (slackEventDto.type === 'url_verification') {
+      return { challenge: slackEventDto.challenge };
     }
 
-    // Handling message events
-    if (body.event?.type === 'message'&& body.event?.bot_id) {
-      return this.slackService.respondToMessage(body.event);
+    if (slackEventDto.event && slackEventDto.event.type === 'message') {
+      //to avoid multiple times response from bot
+      if (
+        slackEventDto.event.bot_id ||
+        slackEventDto.event.subtype === 'bot_message'
+      ) {
+        return { status: 'ok' };
+      }
+      console.log('New Message Event : ', slackEventDto.event);
+      await this.slackService.sendMessage(
+        slackEventDto.event.channel,
+        ` Received Your Message: ${slackEventDto.event.text}  will get back your reply soon`,
+      );
     }
-
-    //This helps your webhook stay active and responsive, even if it doesn’t need to take any action.
-    return { status:"ok received." };
+    return { status: 'ok' };
   }
 }
 

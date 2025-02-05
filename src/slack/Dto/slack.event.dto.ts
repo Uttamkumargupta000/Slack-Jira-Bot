@@ -25,6 +25,14 @@ class SlackEventDataDto {
   @IsOptional()
   @IsString()
   bot_id: string;
+
+  @IsOptional()
+  @IsString()
+  subtype: string;
+
+  @IsOptional()
+  @IsString()
+  status: string;
 }
 
 export class SlackEventDto {
