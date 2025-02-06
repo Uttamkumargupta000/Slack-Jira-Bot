@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { IsOptional, IsString } from "class-validator";
+import { IsOptional, IsString, ValidateNested } from "class-validator";
 
  export class SlackEventDataTypeDto{
   @IsOptional()
@@ -12,7 +12,7 @@ import { IsOptional, IsString } from "class-validator";
 
   @IsOptional()
   @IsString()
-  type: string;
+  type?: string;
   
   @IsOptional()
   @IsString()
@@ -45,7 +45,7 @@ import { IsOptional, IsString } from "class-validator";
   type?: string;
 
   @IsOptional()
-  @IsString()
+  @ValidateNested()
   @Type(() => SlackEventDataTypeDto)
   event?: SlackEventDataTypeDto
  }
