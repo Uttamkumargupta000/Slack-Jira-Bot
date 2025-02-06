@@ -12,13 +12,6 @@ async function bootstrap() {
       forbidNonWhitelisted: false,
     }),
   );
-
-  // DLFSDIHF
-  // LFKJBSDIFH
-  // FLKJKDS
-
-
-  // DHFLKJKDSDFFLKKH
   await app.listen(process.env.PORT ?? 3001);
 }
 bootstrap();
