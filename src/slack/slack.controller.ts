@@ -7,7 +7,7 @@ export class SlackController {
   constructor(private readonly slackService: SlackService) {}
 
   @Post('events')
-  async handleEventFromSlack(@Body() slackEventDto: SlackEventDto) {
+  async handleEventFromSlack(@Body() slackEventDto: SlackEventDto){
     if (slackEventDto.type === 'url_verification') {
       return { challenge: slackEventDto.challenge };
     }
