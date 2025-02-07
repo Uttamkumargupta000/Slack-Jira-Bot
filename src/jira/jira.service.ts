@@ -46,7 +46,7 @@ export class JiraService {
         console.log("Running good and good to go");
         console.log(response);
 
-        // taking the total response data 
+        // taking the total response data
         total = response.data.total;
         allTickets = [...allTickets, ...issues];
         startAt += maxResults;
