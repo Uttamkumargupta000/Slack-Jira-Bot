@@ -1,6 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
-import { FetchUpdatedJiraDto, JiraResponseDto, FetchJiraDto } from './dto/fetch-jira.dto';
+import {
+  FetchUpdatedJiraDto,
+  JiraResponseDto,
+  FetchJiraDto,
+} from './dto/fetch-jira.dto';
 import { lastValueFrom } from 'rxjs';
 
 @Injectable()
@@ -9,9 +13,7 @@ export class JiraService {
   private JIRA_BASE_URL: any;
   private JIRA_AUTH: { username: string; password: string };
 
-  constructor(
-    private httpService: HttpService,
-  ) {
+  constructor(private httpService: HttpService) {
     this.JIRA_BASE_URL = process.env.JIRA_BASE_URL;
 
     this.JIRA_AUTH = {
@@ -20,7 +22,7 @@ export class JiraService {
     };
   }
 
-  //Fetching all the ticket 
+  //Fetching all the ticket
   async fetchJiraALLTickets(dto: FetchJiraDto): Promise<JiraResponseDto> {
     let { startAt = 0, maxResults = 100 } = dto;
     let allTickets: any[] = [];
@@ -30,9 +32,9 @@ export class JiraService {
         const response = await lastValueFrom(
           this.httpService.get(`${this.JIRA_BASE_URL}/search`, {
             headers: {
-              'Authorization': `Basic ${Buffer.from(process.env.JIRA_USERNAME + ':' + process.env.JIRA_API_TOKEN).toString('base64')}`,
-              Accept: 'application/json'
-            } ,
+              Authorization: `Basic ${Buffer.from(process.env.JIRA_USERNAME + ':' + process.env.JIRA_API_TOKEN).toString('base64')}`,
+              Accept: 'application/json',
+            },
             params: { jql: 'ORDER BY created DESC', startAt, maxResults },
           }),
         );
@@ -43,7 +45,7 @@ export class JiraService {
           summary: ticket.fields.summary,
         }));
 
-        console.log("Running good and good to go");
+        console.log('Running good and good to go');
         console.log(response);
 
         // taking the total response data
@@ -54,30 +56,35 @@ export class JiraService {
         this.logger.log(`Fetched ${allTickets.length}/${total} tickets.`);
       } catch (error) {
         this.logger.error(`Error Fetching Jira tickets  ${error.message}`);
-        console.log('Error detail: ',error.response?.data || error)
+        console.log('Error detail: ', error.response?.data || error);
         throw error;
       }
     }
 
-    this.logger.log(`Successfully Fetched tickets ${allTickets.length} tickets.`);
-    return {issues: allTickets}
+    this.logger.log(
+      `Successfully Fetched tickets ${allTickets.length} tickets.`,
+    );
+    return { issues: allTickets };
   }
 
   //Fetch only Updated ticket data
-  async fetchUpdatedTickets(dto: FetchUpdatedJiraDto): Promise<JiraResponseDto> {
+  async fetchUpdatedTickets(
+    dto: FetchUpdatedJiraDto,
+  ): Promise<JiraResponseDto> {
     let startAt = 0;
     const maxResults = 100;
-    let updatedTickets : any[] = [];
+    let updatedTickets: any[] = [];
     let total = 1;
 
-    while(startAt < total) {
-      try{
+    while (startAt < total) {
+      try {
         const response = await lastValueFrom(
-          this.httpService.get(`${this.JIRA_BASE_URL}/search`,{
+          this.httpService.get(`${this.JIRA_BASE_URL}/search`, {
             auth: this.JIRA_AUTH,
             params: {
               jql: `updated >= "${dto.lastFetchTime}" ORDER BY updated DESC`,
-              startAt, maxResults,
+              startAt,
+              maxResults,
             },
           }),
         );
@@ -93,14 +100,17 @@ export class JiraService {
         updatedTickets = [...updatedTickets, ...issues];
         startAt += maxResults;
 
-        this.logger.log(`Fetched ${updatedTickets.length}/${total} updated  tickets.`);
-      }
-      catch(error){
+        this.logger.log(
+          `Fetched ${updatedTickets.length}/${total} updated  tickets.`,
+        );
+      } catch (error) {
         this.logger.error('Error Fetching updated Jira tickets', error);
         throw error;
       }
     }
-    this.logger.log(`Successfully fetched ${updatedTickets.length} updated tickets.`);
-    return {issues: updatedTickets};
+    this.logger.log(
+      `Successfully fetched ${updatedTickets.length} updated tickets.`,
+    );
+    return { issues: updatedTickets };
   }
 }
