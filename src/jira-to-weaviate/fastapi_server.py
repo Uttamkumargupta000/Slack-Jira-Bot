@@ -1,3 +1,7 @@
+# run the following command to run this file in terminal 
+# uvicorn fastapi_server:app --host 0.0.0.0 --port 8000
+
+
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from typing import List
