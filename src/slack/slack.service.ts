@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { WebClient } from '@slack/web-api';
 import { ConfigService } from '@nestjs/config';
-import { SlackEventDto } from './dto/slack.event.dto';
+import { SlackEventDto } from './Dto/slack.event.dto';
 
 
 @Injectable()
