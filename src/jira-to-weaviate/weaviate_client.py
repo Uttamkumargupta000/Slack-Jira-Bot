@@ -154,7 +154,7 @@ def search_tickets(query):
         response = (
             client.query.get(
                 "JiraTicket",
-                ["description", "status", "summary", "assign", "key", "update", "created_at"]
+                ["ticket_id","description", "status", "summary", "assign", "key", "update", "created_at"]
             )
             .with_near_vector({"vector": embedding_vector})  # Use flat list
             .with_limit(5)
@@ -170,7 +170,8 @@ def search_tickets(query):
             return "No relevant Jira tickets found."
 
         formatted_results = "\n".join([
-            (f"- **Key:** {item.get('key', 'N/A')}\n"
+            (f"- **Ticket_id:** {item.get('ticket_id', 'N/A')}\n"
+             f"- **Key:** {item.get('key', 'N/A')}\n"
              f"  **Summary:** {item.get('summary', 'N/A')}\n"
              f"  **Description:** {item.get('description', 'N/A')}\n"
              f"  **Status:** {item.get('status', 'N/A')}\n"
