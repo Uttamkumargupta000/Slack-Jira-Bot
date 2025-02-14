@@ -78,6 +78,7 @@ export class JiraService {
         total = response.data.total;
         allTickets = [...allTickets, ...issues];
 
+        // check for the limited ticket 
         // if(allTickets.length >= 100){
         //   allTickets = allTickets.slice(0,100)
         //   break
