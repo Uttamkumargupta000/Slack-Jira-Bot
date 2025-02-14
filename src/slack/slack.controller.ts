@@ -1,9 +1,9 @@
 import { Controller, Post, Body } from '@nestjs/common';
 import { SlackService } from './slack.service';
-import { SlackEventDto } from './Dto/slack.event.dto';
+import { SlackEventDto } from './dto/slack.event.dto';
 
 @Controller('slack')
-export class SlackController {
+export class SlackController {  
   constructor(private readonly slackService: SlackService) {}
 
   @Post('events')
@@ -29,3 +29,5 @@ export class SlackController {
     return { status: 'ok' };
   }
 }
+
+

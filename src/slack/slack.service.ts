@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { WebClient } from '@slack/web-api';
 import { ConfigService } from '@nestjs/config';
-import { SlackEventDto } from './Dto/slack.event.dto';
+import { SlackEventDto } from './dto/slack.event.dto';
+
 
 @Injectable()
 export class SlackService {
@@ -16,7 +17,7 @@ export class SlackService {
     try {
       const response = await this.slackClient.chat.postMessage({
         channel,
-        text,
+        text
       });
       console.log('Message sent successfully:', response);
       return response as SlackEventDto;
@@ -25,3 +26,4 @@ export class SlackService {
     }
   }
 }
+  
