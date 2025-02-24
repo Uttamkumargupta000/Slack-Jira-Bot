@@ -34,7 +34,7 @@ def add_weaviate_schema():
     schema = {
         "classes": [
             {
-                "class": "JiraTicket",
+                "class": "JiraTicketNew",
                 "description": "Stores Jira ticket details",
                 "vectorizer": "none",  # We provide our own embeddings
                 "properties": [
@@ -46,17 +46,22 @@ def add_weaviate_schema():
                     {"name": "assign", "dataType": ["string"], },
                     {"name": "created_at", "dataType": ["string"]},
                     {"name": "update", "dataType": ["string"]},
+                    {"name": "link", "dataType":["string"]},
+                    {"name": "issuetype", "dataType":["string"]},
+                    {"name": "storypoint", "dataType":["string","number"]},
+                    {"name": "sprint", "dataType":["array","string"]},
+                    {"name": "rootcause", "dataType":["string"]},
                 ]
             }
         ]
     }
 
     existing_schema = client.schema.get()
-    if "classes" in existing_schema and any(cls["class"] == "JiraTicket" for cls in existing_schema["classes"]):
-        logging.info("JiraTicket schema already exists in Weaviate.")
+    if "classes" in existing_schema and any(cls["class"] == "JiraTicketNew" for cls in existing_schema["classes"]):
+        logging.info("JiraTicketNew schema already exists in Weaviate.")
     else:
         client.schema.create(schema)
-        logging.info("JiraTicket schema added to Weaviate.")
+        logging.info("JiraTicketNew schema added to Weaviate.")
 
 # print("3")
 # Generates an embedding using OpenAI
@@ -91,37 +96,69 @@ def generate_embedding(text: str):
 # print("4")
 
 # Stores Jira tickets in Weaviate in batches
+# async def store_tickets_batch(tickets):
+#     try:
+#         with client.batch(batch_size=500) as batch:
+#             for ticket in tickets:
+#                 text_to_embed = f"{ticket.get('summary', '')}. {ticket.get('description', '')}"
+#                 embedding = generate_embedding(text_to_embed)
+
+#                 # Log and verify embedding format
+#                 if not isinstance(embedding, list) or not all(isinstance(num, float) for num in embedding):
+#                     logging.error(f" Invalid embedding format for ticket {ticket.get('ticket_id')} → {type(embedding)}")
+#                     embedding = [0.0] * 1536  # Ensure it's a flat list
+
+#                 batch.add_data_object(
+#                     {
+#                         "ticket_id": str(ticket.get("ticket_id")),
+#                         "key": ticket.get("key"),
+#                         "summary": ticket.get("summary"),
+#                         "description": ticket.get("description"),
+#                         "status": ticket.get("status"),
+#                         "assign": ticket.get("assign"),
+#                         "created_at": ticket.get("created_at"),
+#                         "update": ticket.get("update"),
+#                     },
+#                     class_name="JiraTicket",
+#                     vector=embedding  #  Correctly formatted embedding
+#                 )
+
+#         logging.info(f" Successfully stored {len(tickets)} tickets in Weaviate")
+
+#     except Exception as e:
+#         logging.error(f" Error storing tickets: {e}", exc_info=True)
+
+
+
 async def store_tickets_batch(tickets):
     try:
         with client.batch(batch_size=500) as batch:
             for ticket in tickets:
-                text_to_embed = f"{ticket.get('summary', '')}. {ticket.get('description', '')}"
+                # Convert entire ticket JSON to a string
+                text_to_embed = json.dumps(ticket, ensure_ascii=False)
+
+                # Generate embedding for the entire ticket
                 embedding = generate_embedding(text_to_embed)
+                print(embedding)
 
-                # Log and verify embedding format
+                # Validate embedding format
                 if not isinstance(embedding, list) or not all(isinstance(num, float) for num in embedding):
-                    logging.error(f" Invalid embedding format for ticket {ticket.get('ticket_id')} → {type(embedding)}")
-                    embedding = [0.0] * 1536  # Ensure it's a flat list
+                    logging.error(f"Invalid embedding format for ticket {ticket.get('ticket_id')} → {type(embedding)}")
+                    embedding = [0.0] * 1536  # Ensure valid fallback embedding
 
+                # Store ticket in Weaviate
                 batch.add_data_object(
-                    {
-                        "ticket_id": str(ticket.get("ticket_id")),
-                        "key": ticket.get("key"),
-                        "summary": ticket.get("summary"),
-                        "description": ticket.get("description"),
-                        "status": ticket.get("status"),
-                        "assign": ticket.get("assign"),
-                        "created_at": ticket.get("created_at"),
-                        "update": ticket.get("update"),
-                    },
-                    class_name="JiraTicket",
-                    vector=embedding  #  Correctly formatted embedding
+                    ticket,  # Stores entire ticket JSON
+                    class_name="JiraTicketNew",
+                    vector=embedding  # Store entire ticket embedding
                 )
+                logging.info(ticket)
 
-        logging.info(f" Successfully stored {len(tickets)} tickets in Weaviate")
+        logging.info(f"Successfully stored {len(tickets)} tickets in Weaviate")
 
     except Exception as e:
-        logging.error(f" Error storing tickets: {e}", exc_info=True)
+        logging.error(f"Error storing tickets: {e}", exc_info=True)
+
 
 
 
@@ -153,31 +190,38 @@ def search_tickets(query):
 
         response = (
             client.query.get(
-                "JiraTicket",
-                ["ticket_id","description", "status", "summary", "assign", "key", "update", "created_at"]
+                "JiraTicketNew",
+                ["ticket_id", "key", "summary","description", "status", "assign", "update", "created_at","link", "issuetype","storypoint", "sprint", "rootcause"]
             )
             .with_near_vector({"vector": embedding_vector})  # Use flat list
-            .with_limit(5)
+            # .with_limit(50)
+            # .with_after("cursor_id")
             .do()
         )
 
-        # print(response)  # Debugging step
 
         # Extract and format results
-        results = response.get('data', {}).get('Get', {}).get('JiraTicket', [])
+        results = response.get('data', {}).get('Get', {}).get('JiraTicketNew', [])
         
         if not results:
             return "No relevant Jira tickets found."
 
         formatted_results = "\n".join([
-            (f"- **Ticket_id:** {item.get('ticket_id', 'N/A')}\n"
-             f"- **Key:** {item.get('key', 'N/A')}\n"
-             f"  **Summary:** {item.get('summary', 'N/A')}\n"
-             f"  **Description:** {item.get('description', 'N/A')}\n"
-             f"  **Status:** {item.get('status', 'N/A')}\n"
-             f"  **Assigned To:** {item.get('assign', 'Unassigned')}\n"
-             f"  **Last Updated:** {item.get('update', 'Unknown')}\n"
-             f"  **Created At:** {item.get('created_at', 'Unknown')}")
+            (
+                f"  **Ticket ID:** {item.get('ticket_id', 'Not Available')}\n"
+                f"- **Key:** {item.get('key', 'N/A')}\n"
+                f"  **Summary:** {item.get('summary', 'No Summary Provided')}\n"
+                f"  **Description:** {item.get('description', 'N/A')}\n"
+                f"  **Status:** {item.get('status', 'Pending')}\n"
+                f"  **Assigned To:** {item.get('assign', 'Unassigned')}\n"
+                f"  **Last Updated:** {item.get('update', 'Not Updated yet')}\n"
+                f"  **Created At:** {item.get('created_at', 'Unknown')}\n"
+                f"  **Jira Ticket Link:** {item.get('link', 'Ticket_Link')}\n"
+                f"  **Issue Type:** {item.get('issuetype', 'Not Speified')}\n"
+                f"  **Story Point:** {item.get('storypoint', 'Not Estimated')}\n"
+                f"  **Sprint:** {','.join(item.get('sprint', ['No Sprint Assigned']))}\n"
+                f"  **Root Cause:** {item.get('rootcause', 'No Root cause Identified')}\n"
+             )
             for item in results
         ])
 
@@ -189,10 +233,17 @@ def search_tickets(query):
 # print(search_tickets("What are the tasks that are still not completed?"))
 
 def generate_response(context, user_query):
-    """
-    Uses RAG by providing retrieved Jira ticket data as context to OpenAI's GPT-4.
-    """
-    openai.api_key = OPENAI_API_KEY  # Ensure API key is set
+    # Uses RAG by providing retrieved Jira ticket data as context to OpenAI's GPT-4.
+    openai.api_key = OPENAI_API_KEY 
+
+    # Check if the user is trying to fetch entire ticket data
+    restricted_queries = ["fetch all tickets", "get complete jira data", "retrieve entire database", "list all tickets"]
+    if any(restricted_phrase in user_query.lower() for restricted_phrase in restricted_queries):
+        return " Sorry, I can't provide the entire Jira ticket database."
+    
+    # **Restrict response if no relevant data is found in Weaviate**
+    if not context:
+        return "Sorry i can't provide you this but Mean while you ask question related to the Jira Tickets."
 
     # Call OpenAI's GPT-4o mini with context and user query
     try:
@@ -200,7 +251,7 @@ def generate_response(context, user_query):
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "You are an AI assistant providing Jira ticket updates."},
+                {"role": "system", "content": "You are an AI assistant that ONLY provides Jira ticket information. If the query is unrelated, respond with 'I am restricted to Jira tickets only.'"},
                 {"role": "user", "content": f"User Query: {user_query}\n\nRelevant Tickets:\n{context}"}
             ]
         )
