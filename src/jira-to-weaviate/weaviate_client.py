@@ -76,7 +76,7 @@ def generate_embedding(text: str):
             return [[0.0] * 1536]  # Return a single zero-vector
 
         # Trim text to 8000 characters to avoid exceeding OpenAI token limits
-        text = text[:8000]
+        # text = text[:8000]
 
         response = openai_client.embeddings.create(
             model="text-embedding-ada-002",
@@ -89,9 +89,6 @@ def generate_embedding(text: str):
     except Exception as e:
         logging.error(f" Error generating embedding: {e}")
         return [[0.0] * 1536]  # Return a single zero-vector if OpenAI fails
-
-
-
 
 # print("4")
 
@@ -133,33 +130,33 @@ def generate_embedding(text: str):
 async def store_tickets_batch(tickets):
     try:
         with client.batch(batch_size=500) as batch:
-            for ticket in tickets:
-                # Convert entire ticket JSON to a string
-                text_to_embed = json.dumps(ticket, ensure_ascii=False)
+            if not tickets:
+                print("No tickets to store in Weaviate")
+            else:
+                for ticket in tickets:
+                    # Convert entire ticket JSON to a string
+                    text_to_embed = json.dumps(ticket, ensure_ascii=False)
 
-                # Generate embedding for the entire ticket
-                embedding = generate_embedding(text_to_embed)
-                print(embedding)
+                    # Generate embedding for the entire ticket
+                    embedding = generate_embedding(text_to_embed)
+                    # print(embedding)
 
-                # Validate embedding format
-                if not isinstance(embedding, list) or not all(isinstance(num, float) for num in embedding):
-                    logging.error(f"Invalid embedding format for ticket {ticket.get('ticket_id')} → {type(embedding)}")
-                    embedding = [0.0] * 1536  # Ensure valid fallback embedding
+                    # Validate embedding format
+                    if not isinstance(embedding, list) or not all(isinstance(num, float) for num in embedding):
+                        logging.error(f"Invalid embedding format for ticket {ticket.get('ticket_id')} → {type(embedding)}")
+                        embedding = [0.0] * 1536  # Ensure valid fallback embedding
+                    # Store ticket in Weaviate
+                    batch.add_data_object(
+                        ticket,  # Stores entire ticket JSON
+                        class_name="JiraTicketNew",
+                        vector=embedding  # Store entire ticket embedding
+                    )
+                    logging.info(ticket)
 
-                # Store ticket in Weaviate
-                batch.add_data_object(
-                    ticket,  # Stores entire ticket JSON
-                    class_name="JiraTicketNew",
-                    vector=embedding  # Store entire ticket embedding
-                )
-                logging.info(ticket)
-
-        logging.info(f"Successfully stored {len(tickets)} tickets in Weaviate")
-
+            logging.info(f"Successfully stored {len(tickets)} tickets in Weaviate")
     except Exception as e:
         logging.error(f"Error storing tickets: {e}", exc_info=True)
-
-
+        
 
 
 # store_tickets_batch([{
@@ -176,10 +173,6 @@ async def store_tickets_batch(tickets):
 
 # Add schema before storing tickets
 # add_weaviate_schema()
-
-# 
-
-
 
 
 # Use the new OpenAI client initialization
@@ -199,7 +192,6 @@ def search_tickets(query):
             .do()
         )
 
-
         # Extract and format results
         results = response.get('data', {}).get('Get', {}).get('JiraTicketNew', [])
         
@@ -211,17 +203,17 @@ def search_tickets(query):
                 f"  **Ticket ID:** {item.get('ticket_id', 'Not Available')}\n"
                 f"- **Key:** {item.get('key', 'N/A')}\n"
                 f"  **Summary:** {item.get('summary', 'No Summary Provided')}\n"
-                f"  **Description:** {item.get('description', 'N/A')}\n"
+                f"  **Description:** {item.get('description', 'N/A') if item.get('description') else 'Not Available'}\n"
                 f"  **Status:** {item.get('status', 'Pending')}\n"
                 f"  **Assigned To:** {item.get('assign', 'Unassigned')}\n"
                 f"  **Last Updated:** {item.get('update', 'Not Updated yet')}\n"
                 f"  **Created At:** {item.get('created_at', 'Unknown')}\n"
                 f"  **Jira Ticket Link:** {item.get('link', 'Ticket_Link')}\n"
-                f"  **Issue Type:** {item.get('issuetype', 'Not Speified')}\n"
-                f"  **Story Point:** {item.get('storypoint', 'Not Estimated')}\n"
-                f"  **Sprint:** {','.join(item.get('sprint', ['No Sprint Assigned']))}\n"
-                f"  **Root Cause:** {item.get('rootcause', 'No Root cause Identified')}\n"
-             )
+                f"  **Issue Type:** {item.get('issuetype', 'Not Specified')}\n"
+                f"  **Story Point:** {str(item.get('storypoint')) if item.get('storypoint') else 'Not Estimated'}\n"
+                f"  **Sprint:** {', '.join(item.get('sprint', ['No Sprint Assigned'])) if isinstance(item.get('sprint'), list) else item.get('sprint', 'No Sprint Assigned')}\n"
+                f"  **Root Cause:** {item.get('rootcause', 'No Root Cause Identified') if item.get('rootcause') else 'No Root Cause Identified'}\n"
+            )
             for item in results
         ])
 
@@ -232,6 +224,34 @@ def search_tickets(query):
 
 # print(search_tickets("What are the tasks that are still not completed?"))
 
+# def generate_response(context, user_query):
+#     # Uses RAG by providing retrieved Jira ticket data as context to OpenAI's GPT-4.
+#     openai.api_key = OPENAI_API_KEY 
+
+#     # Check if the user is trying to fetch entire ticket data
+#     restricted_queries = ["fetch all tickets", "get complete jira data", "retrieve entire database", "list all tickets"]
+#     if any(restricted_phrase in user_query.lower() for restricted_phrase in restricted_queries):
+#         return " Sorry, I can't provide the entire Jira ticket database."
+    
+#     # **Restrict response if no relevant data is found in Weaviate**
+#     if not context:
+#         return "Sorry i can't provide you this but Mean while you ask question related to the Jira Tickets."
+
+#     # Call OpenAI's GPT-4o mini with context and user query
+#     try:
+#         client = openai.OpenAI()
+#         response = client.chat.completions.create(
+#             model="gpt-4o-mini",
+#             messages=[
+#                 {"role": "system", "content": "You are an AI assistant that ONLY provides Jira ticket information. If the query is unrelated, respond with 'I am restricted to Jira tickets only.'"},
+#                 {"role": "user", "content": f"User Query: {user_query}\n\nRelevant Tickets:\n{context}"}
+#             ]
+#         )
+
+#         return response.choices[0].message.content
+#     except Exception as e:
+#         return f"Error generating AI response: {str(e)}"
+
 def generate_response(context, user_query):
     # Uses RAG by providing retrieved Jira ticket data as context to OpenAI's GPT-4.
     openai.api_key = OPENAI_API_KEY 
@@ -239,23 +259,48 @@ def generate_response(context, user_query):
     # Check if the user is trying to fetch entire ticket data
     restricted_queries = ["fetch all tickets", "get complete jira data", "retrieve entire database", "list all tickets"]
     if any(restricted_phrase in user_query.lower() for restricted_phrase in restricted_queries):
-        return " Sorry, I can't provide the entire Jira ticket database."
+        return "Sorry, I can't provide the entire Jira ticket database."
     
-    # **Restrict response if no relevant data is found in Weaviate**
+    # Restrict response if no relevant data is found in Weaviate
     if not context:
-        return "Sorry i can't provide you this but Mean while you ask question related to the Jira Tickets."
+        return "Sorry I can't provide you this but meanwhile you can ask questions related to the Jira Tickets."
 
+    # Determine if the user is specifically asking for ticket IDs or keys
+    is_asking_for_ids = any(phrase in user_query.lower() for phrase in 
+                          ["ticket id", "ticket number", "jira id", "ticket key", "jira key"])
+    
     # Call OpenAI's GPT-4o mini with context and user query
     try:
         client = openai.OpenAI()
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "You are an AI assistant that ONLY provides Jira ticket information. If the query is unrelated, respond with 'I am restricted to Jira tickets only.'"},
-                {"role": "user", "content": f"User Query: {user_query}\n\nRelevant Tickets:\n{context}"}
+                {"role": "system", "content": """You are a JIRA ticket assistant that provides helpful information.
+                Guidelines:
+                1. Only use information from the retrieved JIRA tickets
+                2. Do not mention ticket IDs or keys unless specifically asked for them
+                3. Respond in natural language summarizing the relevant information
+                4. If you don't have enough information, say so rather than making things up
+                5. Match your level of detail to the specificity of the question
+                6. For vague questions, provide a summary of relevant tickets
+                7. For specific questions, provide detailed information
+                8. Always attached description, root cause , story point, assign, sprint, jira ticket link
+                """},
+                {"role": "user", "content": f"""
+                User Query: {user_query}
+                
+                Should include ticket IDs and keys: {"Yes" if is_asking_for_ids else "No"}
+                
+                Relevant Tickets:
+                {context}
+                """}
             ]
         )
-
+        
         return response.choices[0].message.content
+    except Exception as e:
+        return f"Error generating AI response: {str(e)}"
+
+        # return response.choices[0].message.content
     except Exception as e:
         return f"Error generating AI response: {str(e)}"
