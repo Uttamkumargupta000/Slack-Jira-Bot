@@ -4,11 +4,11 @@ import { IsOptional, IsString, ValidateNested } from "class-validator";
  export class SlackEventDataTypeDto{
   @IsOptional()
   @IsString()
-  user: string;
+  user?: string;
 
   @IsOptional()
   @IsString()
-  text: string;
+  text?: string;
 
   @IsOptional()
   @IsString()
