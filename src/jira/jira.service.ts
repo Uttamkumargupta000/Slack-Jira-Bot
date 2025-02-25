@@ -29,7 +29,7 @@ export class JiraService {
     let { startAt = 0, maxResults = 100 } = dto;
     let allTickets: any[] = [];
     let total = 1;
-    while (startAt < total && allTickets.length < 100) {
+    while (startAt < total ) {
       try {
         const response = await lastValueFrom(
           this.httpService.get(`${this.JIRA_BASE_URL}/search`, {
@@ -38,7 +38,7 @@ export class JiraService {
               Accept: 'application/json',
             },
             params: {
-              jql: ' project = "PT" and issuetype not in ("Test", "Test Plan", "Test Execution", "Test Set", "Xray Test") ORDER BY created DESC',
+              jql: 'project = "PT" and issuetype not in ("Test", "Test Plan", "Test Execution", "Test Set", "Xray Test") ORDER BY created DESC',
               startAt,
               maxResults,
             },
@@ -162,14 +162,14 @@ export class JiraService {
         total = response.data.total;
         allTickets = [...allTickets, ...issues];
         
-        if (allTickets.length >= 100) {
-          allTickets = allTickets.slice(0, 100);
-          break;
-        }
+        // if (allTickets.length >= 100) {
+        //   allTickets = allTickets.slice(0, 100);
+        //   break;
+        // }
         console.log("Responses : ",response);
         startAt += maxResults;
 
-        console.log(`Fetched ${issues.lenght} new tickets, total collected : ${allTickets.length}`);
+        console.log(`Fetched ${issues.length} new tickets, total collected : ${allTickets.length}`);
 
         
         
@@ -233,7 +233,7 @@ export class JiraService {
   //               Accept: 'application/json'
   //             } ,
   //             params: {
-  //               jql: `updated >= "${dto.lastFetchTime}" ORDER BY updated DESC`,
+  //               jql: 'project = "PT" and issuetype not in ("Test", "Test Plan", "Test Execution", "Test Set", "Xray Test") ORDER BY created DESC',
   //               startAt, maxResults,
   //             },
   //           }),
