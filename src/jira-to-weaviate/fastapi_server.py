@@ -26,8 +26,8 @@ class JiraTicket(BaseModel):
     link: str
     issuetype: str
     storypoint: Union[str, float] = "Not Estimated"
-    sprint: List[str] = ["NoSprint_Assigned"]
-    rootcause: str = "No_Root_Cause_Provided"
+    sprint: List[str] = ["No Sprint Assigned"]
+    rootcause: str = "No Root Cause Provided"
 
 
 # Health check endpoint
@@ -36,8 +36,8 @@ def health_check():
     return {"status": "FastAPI is running"}
 
 
-def sanitize_property_name(value: str) -> str:
     # Convert invalid property names into valid Weaviate GraphQL names.
+def sanitize_property_name(value: str) -> str:
     if isinstance(value, str):
         return value.replace(" ", "_").replace(" ", "-")  # Convert spaces & hyphens to underscores
     return value  # Return as-is if it's not a string
