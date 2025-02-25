@@ -1,3 +1,6 @@
+# uvicorn fastapi_server:app --host 0.0.0.0 --port 5000 --reload
+
+
 import weaviate
 from weaviate.auth import AuthApiKey
 import openai
@@ -181,44 +184,80 @@ def search_tickets(query):
         # Ensure embedding is a flat list
         embedding_vector = generate_embedding(query)  # This should return a flat list
 
+        # response = (
+        #     client.query.get(
+        #         "JiraSlack",
+        #         ["ticket_id", "key", "summary","description", "status", "assign", "update", "created_at","link", "issuetype","storypoint", "sprint", "rootcause"]
+        #     )
+        #     .with_near_vector({"vector": embedding_vector})  # Use flat list
+        #     # .with_limit(50)
+        #     # .with_after("cursor_id")
+        #     .do()
+        # )
+
+        # Hybrid search 
         response = (
             client.query.get(
-                "JiraTicketNew",
-                ["ticket_id", "key", "summary","description", "status", "assign", "update", "created_at","link", "issuetype","storypoint", "sprint", "rootcause"]
+                "JiraSlack",
+                ["ticket_id", "key", "summary", "description", "status", "assign", "update", "created_at", "link", "issuetype", "storypoint", "sprint", "rootcause"]
             )
-            .with_near_vector({"vector": embedding_vector})  # Use flat list
-            # .with_limit(50)
-            # .with_after("cursor_id")
+            .with_hybrid(
+                query="Jira issue not updating",  # Your query text
+                vector=embedding_vector,  # Your generated embedding vector
+                alpha=0.8  # Balance between keyword search (BM25) and vector similarity (0.5 = equal weight)
+            )
+            .with_limit(10)  # Limit results
             .do()
         )
 
+
         # Extract and format results
-        results = response.get('data', {}).get('Get', {}).get('JiraTicketNew', [])
+        results = response.get('data', {}).get('Get', {}).get('JiraSlack', [])
         
         if not results:
             return "No relevant Jira tickets found."
 
+        # formatted_results = "\n".join([
+        #     (
+        #         f"  *Ticket ID:* {item.get('ticket_id', 'Not Available')}\n"
+        #         f"- *Key:* {item.get('key', 'N/A')}\n"
+        #         f"  *Summary:* {item.get('summary', 'No Summary Provided')}\n"
+        #         f"  *Description:* {item.get('description', 'N/A') if item.get('description') else 'Not Available'}\n"
+        #         f"  *Status:* {item.get('status', 'Pending')}\n"
+        #         f"  *Assigned To:* {item.get('assign', 'Unassigned')}\n"
+        #         f"  *Last Updated:* {item.get('update', 'Not Updated yet')}\n"
+        #         f"  *Created At:* {item.get('created_at', 'Unknown')}\n"
+        #         f"  *Jira Ticket Link:* {item.get('link', 'Ticket_Link')}\n"
+        #         f"  *Issue Type:* {item.get('issuetype', 'Not Specified')}\n"
+        #         f"  *Story Point:* {str(item.get('storypoint')) if item.get('storypoint') else 'Not Estimated'}\n"
+        #         f"  *Sprint:* {', '.join(item.get('sprint', ['No Sprint Assigned'])) if isinstance(item.get('sprint'), list) else item.get('sprint', 'No Sprint Assigned')}\n"
+        #         f"  *Root Cause* {item.get('rootcause', 'No Root Cause Identified') if item.get('rootcause') else 'No Root Cause Identified'}\n"
+        #     )
+
+        # 033[1m → Turns on bold formatting.
+        # 033[0m → Resets formatting back to normal.
         formatted_results = "\n".join([
             (
-                f"  **Ticket ID:** {item.get('ticket_id', 'Not Available')}\n"
-                f"- **Key:** {item.get('key', 'N/A')}\n"
-                f"  **Summary:** {item.get('summary', 'No Summary Provided')}\n"
-                f"  **Description:** {item.get('description', 'N/A') if item.get('description') else 'Not Available'}\n"
-                f"  **Status:** {item.get('status', 'Pending')}\n"
-                f"  **Assigned To:** {item.get('assign', 'Unassigned')}\n"
-                f"  **Last Updated:** {item.get('update', 'Not Updated yet')}\n"
-                f"  **Created At:** {item.get('created_at', 'Unknown')}\n"
-                f"  **Jira Ticket Link:** {item.get('link', 'Ticket_Link')}\n"
-                f"  **Issue Type:** {item.get('issuetype', 'Not Specified')}\n"
-                f"  **Story Point:** {str(item.get('storypoint')) if item.get('storypoint') else 'Not Estimated'}\n"
-                f"  **Sprint:** {', '.join(item.get('sprint', ['No Sprint Assigned'])) if isinstance(item.get('sprint'), list) else item.get('sprint', 'No Sprint Assigned')}\n"
-                f"  **Root Cause:** {item.get('rootcause', 'No Root Cause Identified') if item.get('rootcause') else 'No Root Cause Identified'}\n"
+                f"\033[1m  Ticket ID:\033[0m {item.get('ticket_id', 'Not Available')}\n"
+                f"\033[1m- Key:\033[0m {item.get('key', 'N/A')}\n"
+                f"\033[1m  Summary:\033[0m {item.get('summary', 'No Summary Provided')}\n"
+                f"\033[1m  Description:\033[0m {item.get('description', 'N/A') if item.get('description') else 'Not Available'}\n"
+                f"\033[1m  Status:\033[0m {item.get('status', 'Pending')}\n"
+                f"\033[1m  Assigned To:\033[0m {item.get('assign', 'Unassigned')}\n"
+                f"\033[1m  Last Updated:\033[0m {item.get('update', 'Not Updated yet')}\n"
+                f"\033[1m  Created At:\033[0m {item.get('created_at', 'Unknown')}\n"
+                f"\033[1m  Jira Ticket Link:\033[0m {item.get('link', 'Ticket_Link')}\n"
+                f"\033[1m  Issue Type:\033[0m {item.get('issuetype', 'Not Specified')}\n"
+                f"\033[1m  Story Point:\033[0m {str(item.get('storypoint')) if item.get('storypoint') else 'Not Estimated'}\n"
+                f"\033[1m  Sprint:\033[0m {', '.join(item.get('sprint', ['No Sprint Assigned'])) if isinstance(item.get('sprint'), list) else item.get('sprint', 'No Sprint Assigned')}\n"
+                f"\033[1m  Root Cause:\033[0m {item.get('rootcause', 'No Root Cause Identified') if item.get('rootcause') else 'No Root Cause Identified'}\n"
             )
+            # print(formatted_results)
             for item in results
         ])
 
         return formatted_results
-
+    
     except Exception as e:
         return f"Error searching tickets: {str(e)}"
 
@@ -253,6 +292,8 @@ def search_tickets(query):
 #         return f"Error generating AI response: {str(e)}"
 
 def generate_response(context, user_query):
+
+
     # Uses RAG by providing retrieved Jira ticket data as context to OpenAI's GPT-4.
     openai.api_key = OPENAI_API_KEY 
 
@@ -275,16 +316,32 @@ def generate_response(context, user_query):
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": """You are a JIRA ticket assistant that provides helpful information.
-                Guidelines:
-                1. Only use information from the retrieved JIRA tickets
-                2. Do not mention ticket IDs or keys unless specifically asked for them
-                3. Respond in natural language summarizing the relevant information
-                4. If you don't have enough information, say so rather than making things up
-                5. Match your level of detail to the specificity of the question
-                6. For vague questions, provide a summary of relevant tickets
-                7. For specific questions, provide detailed information
-                8. Always attached description, root cause , story point, assign, sprint, jira ticket link
+                {"role": "system", "content": """You are a JIRA ticket assistant that helps users with JIRA ticket information. Your responses should be *accurate, polite, and human-like*.  
+
+                Follow these rules:  
+
+                1. *Always filter tickets strictly based on the user’s date request.*  
+                - If the user asks for "last month," only return tickets created or last updated in the previous month.  
+                - Ignore older tickets unless explicitly asked.  
+
+                2. *Acknowledge mistakes and respond in a conversational way.*  
+                - If you previously provided incorrect tickets, first acknowledge the mistake and apologize before giving the correct list.  
+
+                3. *Understand the query context before listing tickets.*  
+                - Prioritize relevant issue types and categories (e.g., "Adhoc tickets related to Demat").  
+                - Avoid returning generic or irrelevant results.  
+
+                4. *Maintain a professional but friendly tone.*  
+                - Avoid robotic responses. Use natural phrasing like "I see that I made a mistake earlier..." or "Here's what I found for you!"  
+
+                5. *Format responses clearly:*  
+                - List tickets in *descending order by last updated date*.  
+                - Provide *ticket ID, summary, description, status, assigned person, last updated, created date, and a link*.  
+                - Keep responses concise and readable.  
+
+                6. *Return a maximum of 10 tickets at a time.*  
+                - If more tickets exist, mention it and offer to provide additional results.  
+
                 """},
                 {"role": "user", "content": f"""
                 User Query: {user_query}
@@ -304,3 +361,4 @@ def generate_response(context, user_query):
         # return response.choices[0].message.content
     except Exception as e:
         return f"Error generating AI response: {str(e)}"
+
