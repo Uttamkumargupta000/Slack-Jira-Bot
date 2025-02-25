@@ -16,6 +16,6 @@ export class JiraController {
   // Fetch only Updated Ticket 
   @Get('fetch-updated')
   async fetchUpdatedJiraTickets(@Query() dto: FetchUpdatedJiraDto){
-    return await this.jiraService.fetchJiraALLTickets(dto);
+    return await this.jiraService.fetchJiraALLTickets(dto)
   }
 }
