@@ -4,8 +4,6 @@ import { AppService } from './app.service';
 import { SlackModule } from './slack/slack.module';
 import { ConfigModule } from '@nestjs/config';
 import { JiraModule } from './jira/jira.module';
-import { JiraService } from './jira/jira.service';
-import { JiraController } from './jira/jira.controller';
 import { HttpModule } from '@nestjs/axios';
 
 @Module({
@@ -16,8 +14,8 @@ import { HttpModule } from '@nestjs/axios';
       isGlobal: true, // It makes the config globally available
     }),
   ],
-  controllers: [AppController,JiraController],
-  providers: [AppService,JiraService],
-  exports: [JiraService]
+  controllers: [AppController],
+  providers: [AppService],
+  exports: []
 })
 export class AppModule {}
