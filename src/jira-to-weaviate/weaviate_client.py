@@ -70,7 +70,7 @@ def add_weaviate_schema():
 # Generates an embedding using OpenAI
 def generate_embedding(text: str):
     try:
-        #  Ensure `text` is a string, not a list
+        #  Ensure text is a string, not a list
         if isinstance(text, list):
             text = " ".join(text)  # Convert list to a single string
 
@@ -151,7 +151,7 @@ async def store_tickets_batch(tickets):
                     # Store ticket in Weaviate
                     batch.add_data_object(
                         ticket,  # Stores entire ticket JSON
-                        class_name="JiraTicketNew",
+                        class_name="JiraSlack2",
                         vector=embedding  # Store entire ticket embedding
                     )
                     logging.info(ticket)
@@ -184,80 +184,44 @@ def search_tickets(query):
         # Ensure embedding is a flat list
         embedding_vector = generate_embedding(query)  # This should return a flat list
 
-        # response = (
-        #     client.query.get(
-        #         "JiraSlack",
-        #         ["ticket_id", "key", "summary","description", "status", "assign", "update", "created_at","link", "issuetype","storypoint", "sprint", "rootcause"]
-        #     )
-        #     .with_near_vector({"vector": embedding_vector})  # Use flat list
-        #     # .with_limit(50)
-        #     # .with_after("cursor_id")
-        #     .do()
-        # )
-
-        # Hybrid search 
         response = (
             client.query.get(
-                "JiraSlack",
-                ["ticket_id", "key", "summary", "description", "status", "assign", "update", "created_at", "link", "issuetype", "storypoint", "sprint", "rootcause"]
+                "JiraSlack2",
+                ["ticket_id", "key", "summary","description", "status", "assign", "update", "created_at","link", "issuetype","storypoint", "sprint", "rootcause"]
             )
-            .with_hybrid(
-                query="Jira issue not updating",  # Your query text
-                vector=embedding_vector,  # Your generated embedding vector
-                alpha=0.8  # Balance between keyword search (BM25) and vector similarity (0.5 = equal weight)
-            )
-            .with_limit(10)  # Limit results
+            .with_near_vector({"vector": embedding_vector})  # Use flat list
+            # .with_limit(50)
+            # .with_after("cursor_id")
             .do()
         )
 
-
         # Extract and format results
-        results = response.get('data', {}).get('Get', {}).get('JiraSlack', [])
+        results = response.get('data', {}).get('Get', {}).get('JiraSlack2', [])
         
         if not results:
             return "No relevant Jira tickets found."
 
-        # formatted_results = "\n".join([
-        #     (
-        #         f"  *Ticket ID:* {item.get('ticket_id', 'Not Available')}\n"
-        #         f"- *Key:* {item.get('key', 'N/A')}\n"
-        #         f"  *Summary:* {item.get('summary', 'No Summary Provided')}\n"
-        #         f"  *Description:* {item.get('description', 'N/A') if item.get('description') else 'Not Available'}\n"
-        #         f"  *Status:* {item.get('status', 'Pending')}\n"
-        #         f"  *Assigned To:* {item.get('assign', 'Unassigned')}\n"
-        #         f"  *Last Updated:* {item.get('update', 'Not Updated yet')}\n"
-        #         f"  *Created At:* {item.get('created_at', 'Unknown')}\n"
-        #         f"  *Jira Ticket Link:* {item.get('link', 'Ticket_Link')}\n"
-        #         f"  *Issue Type:* {item.get('issuetype', 'Not Specified')}\n"
-        #         f"  *Story Point:* {str(item.get('storypoint')) if item.get('storypoint') else 'Not Estimated'}\n"
-        #         f"  *Sprint:* {', '.join(item.get('sprint', ['No Sprint Assigned'])) if isinstance(item.get('sprint'), list) else item.get('sprint', 'No Sprint Assigned')}\n"
-        #         f"  *Root Cause* {item.get('rootcause', 'No Root Cause Identified') if item.get('rootcause') else 'No Root Cause Identified'}\n"
-        #     )
-
-        # 033[1m → Turns on bold formatting.
-        # 033[0m → Resets formatting back to normal.
         formatted_results = "\n".join([
             (
-                f"\033[1m  Ticket ID:\033[0m {item.get('ticket_id', 'Not Available')}\n"
-                f"\033[1m- Key:\033[0m {item.get('key', 'N/A')}\n"
-                f"\033[1m  Summary:\033[0m {item.get('summary', 'No Summary Provided')}\n"
-                f"\033[1m  Description:\033[0m {item.get('description', 'N/A') if item.get('description') else 'Not Available'}\n"
-                f"\033[1m  Status:\033[0m {item.get('status', 'Pending')}\n"
-                f"\033[1m  Assigned To:\033[0m {item.get('assign', 'Unassigned')}\n"
-                f"\033[1m  Last Updated:\033[0m {item.get('update', 'Not Updated yet')}\n"
-                f"\033[1m  Created At:\033[0m {item.get('created_at', 'Unknown')}\n"
-                f"\033[1m  Jira Ticket Link:\033[0m {item.get('link', 'Ticket_Link')}\n"
-                f"\033[1m  Issue Type:\033[0m {item.get('issuetype', 'Not Specified')}\n"
-                f"\033[1m  Story Point:\033[0m {str(item.get('storypoint')) if item.get('storypoint') else 'Not Estimated'}\n"
-                f"\033[1m  Sprint:\033[0m {', '.join(item.get('sprint', ['No Sprint Assigned'])) if isinstance(item.get('sprint'), list) else item.get('sprint', 'No Sprint Assigned')}\n"
-                f"\033[1m  Root Cause:\033[0m {item.get('rootcause', 'No Root Cause Identified') if item.get('rootcause') else 'No Root Cause Identified'}\n"
+                f"  Ticket ID: {item.get('ticket_id', 'Not Available')}\n"
+                f"- Key: {item.get('key', 'N/A')}\n"
+                f"  Summary: {item.get('summary', 'No Summary Provided')}\n"
+                f"  Description: {item.get('description', 'N/A') if item.get('description') else 'Not Available'}\n"
+                f"  Status: {item.get('status', 'Pending')}\n"
+                f"  Assigned To: {item.get('assign', 'Unassigned')}\n"
+                f"  Last Updated: {item.get('update', 'Not Updated yet')}\n"
+                f"  Created At: {item.get('created_at', 'Unknown')}\n"
+                f"  Jira Ticket Link: {item.get('link', 'Ticket_Link')}\n"
+                f"  Issue Type: {item.get('issuetype', 'Not Specified')}\n"
+                f"  Story Point: {str(item.get('storypoint')) if item.get('storypoint') else 'Not Estimated'}\n"
+                f"  Sprint: {', '.join(item.get('sprint', ['No Sprint Assigned'])) if isinstance(item.get('sprint'), list) else item.get('sprint', 'No Sprint Assigned')}\n"
+                f"  Root Cause {item.get('rootcause', 'No Root Cause Identified') if item.get('rootcause') else 'No Root Cause Identified'}\n"
             )
-            # print(formatted_results)
             for item in results
         ])
 
         return formatted_results
-    
+
     except Exception as e:
         return f"Error searching tickets: {str(e)}"
 
@@ -272,7 +236,7 @@ def search_tickets(query):
 #     if any(restricted_phrase in user_query.lower() for restricted_phrase in restricted_queries):
 #         return " Sorry, I can't provide the entire Jira ticket database."
     
-#     # **Restrict response if no relevant data is found in Weaviate**
+#     # *Restrict response if no relevant data is found in Weaviate*
 #     if not context:
 #         return "Sorry i can't provide you this but Mean while you ask question related to the Jira Tickets."
 
@@ -300,7 +264,7 @@ def generate_response(context, user_query):
     # Check if the user is trying to fetch entire ticket data
     restricted_queries = ["fetch all tickets", "get complete jira data", "retrieve entire database", "list all tickets"]
     if any(restricted_phrase in user_query.lower() for restricted_phrase in restricted_queries):
-        return "Sorry, I can't provide the entire Jira ticket database."
+        return "For security and performance reasons, I can't provide the entire Jira ticket database."
     
     # Restrict response if no relevant data is found in Weaviate
     if not context:
@@ -316,33 +280,70 @@ def generate_response(context, user_query):
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": """You are a JIRA ticket assistant that helps users with JIRA ticket information. Your responses should be *accurate, polite, and human-like*.  
+                {"role": "system", "content": """You are a JIRA ticket assistant for Slack that helps users with JIRA ticket information. First analyse the retrieved ticket details, then give responses should be accurate, polite, and human-like.  
 
-                Follow these rules:  
+                Follow these rules:
+                 **General Guidelines:**  
+                1. *Understand the User Query Before Responding*  
+                    - Determine if the user is asking for specific tickets which matches the defined properties (by ID), a summary, general status updates , sprint , issue type, story point.  
+                    - Prioritize *relevant* tickets based on query keywords (e.g., "Adhoc tickets related to Demat" or "Incidents related to demat").  
+                    - give all the related tickets according to the user querry present in the database.
+                    - If the query is unclear, ask a *clarifying question* instead of guessing.  
 
-                1. *Always filter tickets strictly based on the user’s date request.*  
-                - If the user asks for "last month," only return tickets created or last updated in the previous month.  
-                - Ignore older tickets unless explicitly asked.  
+                2. *Filter and Sort Tickets Correctly*  
+                    - *Strictly filter tickets by the requested date ,month and year range.*  
+                    - "Last month" → Include only tickets created or updated  in the previous month of the current year only.  
+                    - Ignore old tickets unless explicitly requested.  
+                    - *Sort results by last updated date (Descending).*  
 
-                2. *Acknowledge mistakes and respond in a conversational way.*  
-                - If you previously provided incorrect tickets, first acknowledge the mistake and apologize before giving the correct list.  
+                
+                    *Example:*  
+                    List adhoc tickets related to Demat from Jan 2025?  
+                    - *Last Updated:* January 21, 2025  
+                    - *Created At:* January 31, 2024  
+                        (Either the updated date or the created date should match the query date.)  
 
-                3. *Understand the query context before listing tickets.*  
-                - Prioritize relevant issue types and categories (e.g., "Adhoc tickets related to Demat").  
-                - Avoid returning generic or irrelevant results.  
+                3. *Maintain a Friendly, Professional Tone*  
+                    - Avoid robotic responses.  
+                    - Use natural phrasing like:  
+                    -  "Here’s what I found for you!"  
+                    -  "Looks like I made a small mistake earlier—let me correct that!"  
 
-                4. *Maintain a professional but friendly tone.*  
-                - Avoid robotic responses. Use natural phrasing like "I see that I made a mistake earlier..." or "Here's what I found for you!"  
+                4. *Format Responses Clearly*  
+                    - Use Markdown (**bold**, - bullet points, etc.) for readability.  
+                    - Structure responses as:  
 
-                5. *Format responses clearly:*  
-                - List tickets in *descending order by last updated date*.  
-                - Provide *ticket ID, summary, description, status, assigned person, last updated, created date, and a link*.  
-                - Keep responses concise and readable.  
+                    *Ticket List Example:*  
+                    - *ID:* ABC-123 | *Summary:* Issue with login  
+                    - *Status:* In Progress | *Assigned To:* John Doe  
+                    - *Last Updated:* Feb 22, 2025 | *Created:* Jan 15, 2025  
+                    - *Description:* User unable to log in.  
+                    - *[View Ticket](https://jira.example.com/browse/ABC-123)* 
+                 
+                 5. *Strictly follow the user's query criteria:*
+                    If the query specifies an issue type (e.g., Incident, Bug, Task), filter results based on the Issue Type property of the ticket, not from the ticket summary.
+                    Example: If asked for an "Incident" related to KYC, return only tickets where Issue Type = Incident and not tickets where "incident" is just a word in the summary (e.g., "RCA on Aadhaar OTP verification incident" should not be considered an incident).
 
-                6. *Return a maximum of 10 tickets at a time.*  
-                - If more tickets exist, mention it and offer to provide additional results.  
+                    
 
-                """},
+                    Valid Issue Types:
+
+                    The issue type of a ticket can only be one of the following:
+                    Adhoc, Bug, Epic, Incident, Spike, Task, Story, Tech Task.
+                    Always verify the Issue Type property before responding.
+
+                    **Don't:**
+                    1. Do not provide extra responses beyond what the user explicitly requested.
+                    (Example: If asked for a demat ticket with only incident as the issue type, return only those tickets which as incident as issue type and issue type is a key and it's value is incident . Do not include demat tickets with other issue types.)
+                    
+                    2. Do not include irrelevant issue types:
+
+                    If the user asks for demat tickets with only "Incident" as the issue type, return only those tickets. Do not include demat tickets with other issue types (e.g., Bug, Task, or Epic).
+
+                If no relevant tickets exist, say:  
+                "No tickets match your criteria. Try adjusting the date range or category."  
+                        
+                """  },
                 {"role": "user", "content": f"""
                 User Query: {user_query}
                 
@@ -361,4 +362,3 @@ def generate_response(context, user_query):
         # return response.choices[0].message.content
     except Exception as e:
         return f"Error generating AI response: {str(e)}"
-
