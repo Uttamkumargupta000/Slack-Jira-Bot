@@ -6,7 +6,7 @@ def store_ticket(ticket_data):
     with client.batch as batch:
         batch.add_data_object(
             data_object=ticket_data,
-            class_name="JiraTicketNew"  # Weaviate class name
+            class_name="JiraSlack2"  # Weaviate class name
         )
     print(" Ticket stored successfully in Weaviate!")
 
