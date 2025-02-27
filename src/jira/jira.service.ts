@@ -1,3 +1,9 @@
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
+/* eslint-disable @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import {
@@ -29,7 +35,7 @@ export class JiraService {
     let { startAt = 0, maxResults = 100 } = dto;
     let allTickets: any[] = [];
     let total = 1;
-    while (startAt < total ) {
+    while (startAt < total) {
       try {
         const response = await lastValueFrom(
           this.httpService.get(`${this.JIRA_BASE_URL}/search`, {
@@ -83,8 +89,8 @@ export class JiraService {
             ([key, value]) =>
               key.includes('customfield') && key.endsWith('10076'),
           );
-          // setting the default value 
-          let rootcause = 'No Root Cause'; 
+          // setting the default value
+          let rootcause = 'No Root Cause';
 
           if (rootCauseEntry) {
             const value = rootCauseEntry[1]; // Extract the field value
@@ -96,7 +102,7 @@ export class JiraService {
             }
           }
 
-          // Fetching the entire value stored in jira to get the value 
+          // Fetching the entire value stored in jira to get the value
           // console.log('Ticket Key:', ticket.key);
           // console.log('Extracted Root Cause:', rootcause);
           // console.log('All Fields:', JSON.stringify(fields, null, 2));
@@ -126,14 +132,13 @@ export class JiraService {
                 ([key, value]) =>
                   key.includes('customfield') &&
                   key.endsWith('10028') &&
-                  typeof value === 'number',
+                  (typeof value === 'number' || typeof value === 'string'),
               )?.[1] ?? 'Not Estimated',
 
             // Fetch Sprint (handling multiple sprints)
             sprint: (() => {
               const sprintField = Object.entries(fields).find(
-                ([key]) =>
-                  key.includes('customfield') && key.endsWith('10020'),
+                ([key]) => key.includes('customfield') && key.endsWith('10020'),
               )?.[1];
 
               if (Array.isArray(sprintField)) {
@@ -157,22 +162,21 @@ export class JiraService {
           };
         });
 
-        
         // taking the total response data
         total = response.data.total;
         allTickets = [...allTickets, ...issues];
-        
+
         // if (allTickets.length >= 100) {
         //   allTickets = allTickets.slice(0, 100);
         //   break;
         // }
-        console.log("Responses : ",response);
+        console.log('Responses : ', response);
         startAt += maxResults;
 
-        console.log(`Fetched ${issues.length} new tickets, total collected : ${allTickets.length}`);
+        console.log(
+          `Fetched ${issues.length} new tickets, total collected : ${allTickets.length}`,
+        );
 
-        
-        
         this.logger.log(`Fetched ${allTickets.length}/${total} tickets.`);
       } catch (error) {
         this.logger.error(`Error Fetching Jira tickets  ${error.message}`);
@@ -180,7 +184,7 @@ export class JiraService {
         throw error;
       }
     }
-    
+
     console.log(' Final Payload:', JSON.stringify(allTickets[0], null, 2));
     this.logger.log(
       `Successfully Fetched tickets ${allTickets.length} tickets.`,

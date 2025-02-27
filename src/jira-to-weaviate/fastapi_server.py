@@ -1,4 +1,4 @@
-# uvicorn fastapi_server:app --host 0.0.0.0 --port 5000 --reload
+# uvicorn fastapi_server:app --host 0.0.0.0 --port 5001 --reload
 
 
 from fastapi import FastAPI, HTTPException, Request
