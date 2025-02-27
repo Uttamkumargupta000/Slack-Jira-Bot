@@ -151,7 +151,7 @@ async def store_tickets_batch(tickets):
                     # Store ticket in Weaviate
                     batch.add_data_object(
                         ticket,  # Stores entire ticket JSON
-                        class_name="JiraSlack2",
+                        class_name="JiraTicketNew",
                         vector=embedding  # Store entire ticket embedding
                     )
                     logging.info(ticket)
@@ -186,7 +186,7 @@ def search_tickets(query):
 
         response = (
             client.query.get(
-                "JiraSlack2",
+                "JiraTicketNew",
                 ["ticket_id", "key", "summary","description", "status", "assign", "update", "created_at","link", "issuetype","storypoint", "sprint", "rootcause"]
             )
             .with_near_vector({"vector": embedding_vector})  # Use flat list
@@ -196,7 +196,7 @@ def search_tickets(query):
         )
 
         # Extract and format results
-        results = response.get('data', {}).get('Get', {}).get('JiraSlack2', [])
+        results = response.get('data', {}).get('Get', {}).get('JiraTicketNew', [])
         
         if not results:
             return "No relevant Jira tickets found."

@@ -35,11 +35,13 @@ export class SlackService {
   }
 
   async handleUserQuery(channel: string, userMessage: string) {
+    console.log("receive the message to the services file to get the query")
     try {
       console.log(`sending message to fastapi : ${userMessage}`);
 
       // const formattedMessage = userMessage.trim();
 
+      console.log("sending message to the fastapi server")
       const fastApiResponse = await firstValueFrom(
         this.httpservice.post(
           this.fastApiUrl,

@@ -9,9 +9,11 @@ export class SlackController {
 
   @Post('events')
   async handleEventFromSlack(@Body() slackEventDto: SlackEventDto){
+    console.log("Runing start for event")
     if (slackEventDto.type === 'url_verification') {
       return { challenge: slackEventDto.challenge };
     }
+    console.log("verification complete")
 
     const event = slackEventDto.event;
     const channel =event?.channel;
@@ -27,6 +29,7 @@ export class SlackController {
       return {message: "duplicate request ignored"}
     }
 
+    console.log("checking for the event to be occur")
     if (slackEventDto.event && slackEventDto.event.type === 'message') {
       //to avoid multiple times response from bot
       if (
@@ -37,6 +40,7 @@ export class SlackController {
       }
       console.log('New Message Event : ', slackEventDto.event);
 
+      console.log("sending message to the services to handle the request")
       await this.slackService.handleUserQuery(
         channel, text
       );
