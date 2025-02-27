@@ -1,10 +1,11 @@
 # uvicorn fastapi_server:app --host 0.0.0.0 --port 5000 --reload
 
-
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import weaviate
 from weaviate.auth import AuthApiKey
 import openai
 import os
+import logging
 import json
 import numpy as np
 import logging
@@ -37,7 +38,7 @@ def add_weaviate_schema():
     schema = {
         "classes": [
             {
-                "class": "JiraTicketNew",
+                "class": "DemoTicket",
                 "description": "Stores Jira ticket details",
                 "vectorizer": "none",  # We provide our own embeddings
                 "properties": [
@@ -51,8 +52,8 @@ def add_weaviate_schema():
                     {"name": "update", "dataType": ["string"]},
                     {"name": "link", "dataType":["string"]},
                     {"name": "issuetype", "dataType":["string"]},
-                    {"name": "storypoint", "dataType":["string","number"]},
-                    {"name": "sprint", "dataType":["array","string"]},
+                    {"name": "storypoint", "dataType":["string"]},
+                    {"name": "sprint", "dataType":["string[]"]},
                     {"name": "rootcause", "dataType":["string"]},
                 ]
             }
@@ -60,11 +61,11 @@ def add_weaviate_schema():
     }
 
     existing_schema = client.schema.get()
-    if "classes" in existing_schema and any(cls["class"] == "JiraTicketNew" for cls in existing_schema["classes"]):
-        logging.info("JiraTicketNew schema already exists in Weaviate.")
+    if "classes" in existing_schema and any(cls["class"] == "DemoTicket" for cls in existing_schema["classes"]):
+        logging.info("DemoTicket schema already exists in Weaviate.")
     else:
         client.schema.create(schema)
-        logging.info("JiraTicketNew schema added to Weaviate.")
+        logging.info("DemoTicket schema added to Weaviate.")
 
 # print("3")
 # Generates an embedding using OpenAI
@@ -87,6 +88,7 @@ def generate_embedding(text: str):
         )
 
         embedding = response.data[0].embedding
+        print(embedding)
         return  np.array(embedding, dtype=np.float32).tolist()  # Return the correct embedding
 
     except Exception as e:
@@ -151,7 +153,7 @@ async def store_tickets_batch(tickets):
                     # Store ticket in Weaviate
                     batch.add_data_object(
                         ticket,  # Stores entire ticket JSON
-                        class_name="JiraTicketNew",
+                        class_name="DemoTicket",
                         vector=embedding  # Store entire ticket embedding
                     )
                     logging.info(ticket)
@@ -186,7 +188,7 @@ def search_tickets(query):
 
         response = (
             client.query.get(
-                "JiraTicketNew",
+                "DemoTicket",
                 ["ticket_id", "key", "summary","description", "status", "assign", "update", "created_at","link", "issuetype","storypoint", "sprint", "rootcause"]
             )
             .with_near_vector({"vector": embedding_vector})  # Use flat list
@@ -196,7 +198,7 @@ def search_tickets(query):
         )
 
         # Extract and format results
-        results = response.get('data', {}).get('Get', {}).get('JiraTicketNew', [])
+        results = response.get('data', {}).get('Get', {}).get('DemoTicket', [])
         
         if not results:
             return "No relevant Jira tickets found."

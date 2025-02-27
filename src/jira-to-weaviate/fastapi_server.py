@@ -2,16 +2,19 @@
 
 
 from fastapi import FastAPI, HTTPException, Request
+from feedback import router as feedback_router
+from weaviate_client import store_tickets_batch, search_tickets, generate_response
 from pydantic import BaseModel
-from typing import List, Union
+from pydantic import Field
+from typing import List, Union,Optional
 import asyncio
 import logging
-from weaviate_client import store_tickets_batch, search_tickets, generate_response
 
 # Logging setup
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 app = FastAPI()
+app.include_router(feedback_router)
 
 # Define Data Model for Jira Tickets
 class JiraTicket(BaseModel):
@@ -25,8 +28,8 @@ class JiraTicket(BaseModel):
     update: str
     link: str
     issuetype: str
-    storypoint: Union[str, float] = "Not Estimated"
-    sprint: List[str] = ["No Sprint Assigned"]
+    storypoint: Optional[Union[str, float]] = Field(default=None, description="Story point can be a float or a descriptive string")
+    sprint: List[str] = Field(default_factory=lambda: ["No Sprint Assigned"], description="List of sprints")
     rootcause: str = "No Root Cause Provided"
 
 
@@ -37,10 +40,12 @@ def health_check():
 
 
     # Convert invalid property names into valid Weaviate GraphQL names.
-def sanitize_property_name(value: str) -> str:
+def sanitize_property_name(value: Union[str, float, None]) -> Union[str, float, None]:
     if isinstance(value, str):
-        return value.replace(" ", "_").replace(" ", "-")  # Convert spaces & hyphens to underscores
-    return value  # Return as-is if it's not a string
+        return value.replace(" ", "_").replace("-", "_")
+    elif isinstance(value, (int, float)):
+        return value  # Directly return if it's a number
+    return value
 
 
 # Endpoint to receive Jira tickets and store them in Weaviate
@@ -55,23 +60,24 @@ async def store_tickets(request: Request, tickets: List[JiraTicket]):
         # Convert tickets to dict format required for Weaviate
         tickets_data = [
             {
-                "ticket_id": sanitize_property_name(ticket.id),
-                "key": sanitize_property_name(ticket.key),
-                "summary": sanitize_property_name(ticket.summary),
-                "description": sanitize_property_name(ticket.description),
-                "status": sanitize_property_name(ticket.status),
-                "assign": sanitize_property_name(ticket.assign),
-                "created_at": sanitize_property_name(ticket.created_at),
-                "update": sanitize_property_name(ticket.update),
-                "link": sanitize_property_name(ticket.link),
-                "issuetype": sanitize_property_name(ticket.issuetype),
-                "storypoint": sanitize_property_name(str(ticket.storypoint)),  # Convert storypoint to string if needed
-                "sprint": [sanitize_property_name(s) for s in ticket.sprint],  # Sanitize each sprint
-                "rootcause": sanitize_property_name(ticket.rootcause)
+                "ticket_id": ticket.id,
+                "key": ticket.key,
+                "summary": ticket.summary,
+                "description": ticket.description,
+                "status": ticket.status,
+                "assign": ticket.assign,
+                "created_at": ticket.created_at,
+                "update": ticket.update,
+                "link": ticket.link,
+                "issuetype": ticket.issuetype,
+                "storypoint": sanitize_property_name(ticket.storypoint) if ticket.storypoint is not None else None,
+                "sprint": [sanitize_property_name(s) for s in ticket.sprint] if ticket.sprint else [],
+                "rootcause": ticket.rootcause
             }
             for ticket in tickets
         ]
 
+        print(tickets_data)
         # Store data asynchronously to prevent blocking
         asyncio.create_task(store_tickets_batch(tickets_data))
 
@@ -101,13 +107,14 @@ async def process_query(request: UserQuery):
     processed_queryies.add(query_text)
     asyncio.create_task(remove_old_query(query_text))
 
+
     try:
         logging.info(f"Received query: {request.query}")
 
         # retrived jira ticket using weaviate
-        retrived_data = search_tickets(request.query)
+        retrived_data = search_tickets(query_text)
 
-        if retrived_data == "NO relevant jira tickets found.":
+        if not retrived_data :
             return {"response": "No relevant Jira Ticket found Please refine your query"}
         
         # generating ai response 
