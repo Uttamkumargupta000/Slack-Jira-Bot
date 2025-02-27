@@ -35,7 +35,7 @@ export class JiraService {
     let { startAt = 0, maxResults = 100 } = dto;
     let allTickets: any[] = [];
     let total = 1;
-    while (startAt < total) {
+    while (startAt < total ) {
       try {
         const response = await lastValueFrom(
           this.httpService.get(`${this.JIRA_BASE_URL}/search`, {
@@ -127,12 +127,12 @@ export class JiraService {
             issuetype: fields.issuetype?.name ?? 'Unknown Issue Type',
 
             // Fetch Story Points (handling multiple values)
-            story_point:
+            storypoint:
               Object.entries(fields).find(
                 ([key, value]) =>
                   key.includes('customfield') &&
                   key.endsWith('10028') &&
-                  (typeof value === 'number' || typeof value === 'string'),
+                  typeof value === 'number',
               )?.[1] ?? 'Not Estimated',
 
             // Fetch Sprint (handling multiple sprints)
@@ -165,12 +165,12 @@ export class JiraService {
         // taking the total response data
         total = response.data.total;
         allTickets = [...allTickets, ...issues];
-
+        
         // if (allTickets.length >= 100) {
         //   allTickets = allTickets.slice(0, 100);
         //   break;
         // }
-        console.log('Responses : ', response);
+        console.log("Responses : ",response);
         startAt += maxResults;
 
         console.log(
@@ -204,6 +204,8 @@ export class JiraService {
         if (typeof ticket.description === 'object') {
           ticket.description = JSON.stringify(ticket.description);
         }
+
+        console.log("fast api pr bhej raha hu")
         const response = await lastValueFrom(
           this.httpService.post(`${this.FASTAPI_URL}/store-tickets`, [ticket], {
             headers: { 'Content-Type': 'application/json' },
