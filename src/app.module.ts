@@ -5,11 +5,13 @@ import { SlackModule } from './slack/slack.module';
 import { ConfigModule } from '@nestjs/config';
 import { JiraModule } from './jira/jira.module';
 import { HttpModule } from '@nestjs/axios';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [HttpModule,
     SlackModule,
     JiraModule,
+    ScheduleModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true, // It makes the config globally available
     }),
