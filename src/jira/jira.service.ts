@@ -12,6 +12,7 @@ import {
   FetchJiraDto,
 } from './dto/fetch-jira.dto';
 import { lastValueFrom } from 'rxjs';
+import {Cron, CronExpression } from '@nestjs/schedule';
 import { json } from 'stream/consumers';
 
 @Injectable()
@@ -19,7 +20,9 @@ export class JiraService {
   private readonly logger = new Logger(JiraService.name);
   private JIRA_BASE_URL: string = process.env.JIRA_BASE_URL!;
   private FASTAPI_URL: string = process.env.FASTAPI_URL!;
+  private lastFetchTime: string | null = null; // Stores last fetch time
   private JIRA_AUTH: { username: string; password: string };
+  private isFetching = false;
 
   constructor(private httpService: HttpService) {
     this.JIRA_BASE_URL = process.env.JIRA_BASE_URL!;
@@ -123,7 +126,7 @@ export class JiraService {
               : 'Unknown Date',
 
             // dynamically fetched jira ticket link
-            link: `https://gripinvest.atlassian.net/browse/${ticket.key}`, // Jira ticket link
+            link: `https://gripinvest.atlassian.net/browse/${ticket.key}`,
             issuetype: fields.issuetype?.name ?? 'Unknown Issue Type',
 
             // Fetch Story Points (handling multiple values)
@@ -156,9 +159,6 @@ export class JiraService {
             })(),
 
             rootcause,
-            // Fetch Root Cause dynamically
-            // rootcause: Object.entries(fields)
-            //   .find(([key, value]) => key.toLowerCase().includes('customfield') && key.endsWith('10076') && typeof value === 'string')?.[1] ?? 'No Root Cause',
           };
         });
 
@@ -223,57 +223,236 @@ export class JiraService {
     }
   }
 
-  //Fetch only Updated ticket data
-  //   async fetchUpdatedTickets(dto: FetchUpdatedJiraDto): Promise<JiraResponseDto> {
-  //     let startAt = 0;
-  //     const maxResults = 100;
-  //     let updatedTickets : any[] = [];
-  //     let total = 1;
+  // Fetch New & Updated Tickets Automatically Every Day
+  // @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT) // Runs at midnight daily
 
-  //     while(startAt < total) {
-  //       try{
-  //         const response = await lastValueFrom(
-  //           this.httpService.get(`${this.JIRA_BASE_URL}/search`,{
-  //             headers: {
-  //               'Authorization': `Basic ${Buffer.from(process.env.JIRA_USERNAME + ':' + process.env.JIRA_API_TOKEN).toString('base64')}`,
-  //               Accept: 'application/json'
-  //             } ,
-  //             params: {
-  //               jql: 'project = "PT" and issuetype not in ("Test", "Test Plan", "Test Execution", "Test Set", "Xray Test") ORDER BY created DESC',
-  //               startAt, maxResults,
-  //             },
-  //           }),
-  //         );
+  @Cron(process.env.AUTO_FETCH_CRON_TIME || CronExpression.EVERY_12_HOURS) // Runs every 12 hours
+  async autoFetchUpdatedTickets() {
+    try {
+      if (this.isFetching) {
+        this.logger.warn(
+          'autoFetchUpdatedTickets is already running, skipping...',
+        );
+        return;
+      }
 
-  //         const issues = response.data.issues.map((ticket) => ({
-  //           id: ticket.id,
-  //           key: ticket.key,
-  //           summary: ticket.fields.summary,
-  //           status: ticket.fields.status.name,
-  //         }));
+      this.isFetching = true; // Set flag to true before execution
 
-  //         // updating the stored file while updating and creating data
-  //         total = response.data.total;
-  //         updatedTickets = [...updatedTickets, ...issues];
-  //         startAt += maxResults;
+      this.logger.log(
+        `Cron job triggered with schedule: ${process.env.AUTO_FETCH_CRON_TIME || CronExpression.EVERY_12_HOURS}`,
+      );
 
-  //         console.log(response)
+      this.logger.log(
+        `Cron job running at ${new Date().toLocaleString('en-IN', {
+          timeZone: 'Asia/Kolkata',
+        })}`,
+      );
 
-  //         this.logger.log(`Fetched ${updatedTickets.length}/${total} updated  tickets.`);
-  //       }
-  //       catch(error){
-  //         this.logger.error('Error Fetching updated Jira tickets', error);
-  //         throw error;
-  //       }
-  //     }
-  //     this.logger.log(`Successfully fetched ${updatedTickets.length} updated tickets.`);
+      const lastFetchTime =
+        this.lastFetchTime || new Date(new Date().getTime()).toISOString(); // + 5.5 * 60 * 60 * 1000
+      console.log(lastFetchTime);
 
-  //     // query ai to find the important update in jira
-  //     // const aiQueryDto: AIQueryDto = {
-  //     //   query: 'find the most important update in jira',
-  //     //   tickets: updatedTickets,
-  //     // }
-  //     // const bestMatch = await this.aiService.queryJiraWithAI(aiQueryDto);
-  //     return {issues: updatedTickets};
-  //   }
+      await this.fetchUpdatedTickets({
+        lastFetchTime,
+        startAt: 0,
+        maxResults: 50,
+      });
+      console.log('Process completed.');
+
+      // this.lastFetchTime = new Date().toISOString();
+      this.lastFetchTime = new Date(new Date().getTime()).toISOString(); // + 5.5 * 60 * 60 * 1000,
+    } catch (error) {
+      this.logger.error('Error in scheduled Jira ticket fetch:', error);
+    } finally {
+      this.isFetching = false; // Reset flag after execution
+    }
+  }
+  // async testCronJob() {
+  //   await this.autoFetchNewAndUpdatedTickets();
+  // }
+
+  async fetchUpdatedTickets(
+    dto: FetchUpdatedJiraDto, // dto: fetchUpdatedJiraDto
+  ): Promise<JiraResponseDto> {
+    this.logger.log('Starting daily fetch for new and updated Jira tickets...');
+
+    let startAt = 0;
+    const maxResults = 100;
+    let total = 1;
+    let allTickets: any[] = [];
+
+    while (startAt < total) {
+      try {
+        // const nextFetchTime = new Date(
+        //   new Date(lastFetchTime).getTime() + 24 * 60 * 60 * 1000,
+        // );
+        // console.log('First Time:', lastFetchTime);
+        // console.log('Next Time:', nextFetchTime.toISOString()); // Prints in UTC format
+
+        const response = await lastValueFrom(
+          this.httpService.get(`${this.JIRA_BASE_URL}/search`, {
+            headers: {
+              Authorization: `Basic ${Buffer.from(process.env.JIRA_USERNAME + ':' + process.env.JIRA_API_TOKEN).toString('base64')}`,
+              Accept: 'application/json',
+            },
+            params: {
+              jql: `project = "PT" AND (created >= -1d OR updated >= -1d) 
+                    AND issuetype NOT IN ("Test", "Test Plan", "Test Execution", "Test Set", "Xray Test") 
+                    ORDER BY created DESC`,
+              startAt,
+              maxResults,
+            },
+          }),
+        );
+
+        //  converting description into string of json format
+        const extractTextFromDescription = (description: any): string => {
+          if (!description) return 'No Description';
+
+          if (typeof description === 'string') {
+            return description; // Already a plain string
+          }
+
+          if (description?.content && Array.isArray(description.content)) {
+            return description.content
+              .map((item) =>
+                item.content
+                  ? item.content.map((subItem) => subItem.text).join(' ')
+                  : '',
+              )
+              .join('\n');
+          }
+
+          return 'Invalid Description Format'; // Fallback
+        };
+
+        // const issues = response.data.issues.map((ticket) => ({
+        //   id: ticket.id?.toString(),
+        //   key: ticket.key?.toString(),
+        //   summary: ticket.fields?.summary ?? 'No Summary',
+        //   status: ticket.fields?.status?.name ?? 'Unknown Status',
+        //   assign: ticket.fields?.assignee?.displayName ?? 'Unassigned',
+        //   created_at: ticket.fields?.created
+        //     ? new Date(ticket.fields.created).toLocaleString('en-IN', {
+        //         timeZone: 'Asia/Kolkata',
+        //       })
+        //     : 'Unknown Date',
+        //   update: ticket.fields?.updated
+        //     ? new Date(ticket.fields.updated).toLocaleString('en-IN', {
+        //         timeZone: 'Asia/Kolkata',
+        //       })
+        //     : 'Unknown Date',
+        // }));
+
+        const issues = response.data.issues.map((ticket) => {
+          const fields = ticket.fields || {}; // Ensure fields exist
+          const rootCauseEntry = Object.entries(fields).find(
+            ([key, value]) =>
+              key.includes('customfield') && key.endsWith('10076'),
+          );
+          // setting the default value
+          let rootcause = 'No Root Cause';
+
+          if (rootCauseEntry) {
+            const value = rootCauseEntry[1]; // Extract the field value
+
+            if (typeof value === 'string') {
+              rootcause = value; // Direct string value
+            } else if (typeof value === 'object' && value !== null) {
+              rootcause = (value as any)?.value ?? 'No Root Cause'; // Extract from object
+            }
+          }
+
+          // Fetching the entire value stored in jira to get the value
+          // console.log('Ticket Key:', ticket.key);
+          // console.log('Extracted Root Cause:', rootcause);
+          // console.log('All Fields:', JSON.stringify(fields, null, 2));
+          return {
+            id: ticket.id?.toString() || 'No ID',
+            key: ticket.key?.toString() || 'No Key',
+            summary: fields.summary ?? 'No Summary',
+            description:
+              extractTextFromDescription(fields.description) ||
+              'No Description',
+            status: fields.status?.name ?? 'Unknown Status',
+            assign: fields.assignee?.displayName ?? 'Unassigned',
+            created_at: fields.created
+              ? new Date(fields.created).toISOString()
+              : 'Unknown Date',
+            update: fields.updated
+              ? new Date(fields.updated).toISOString()
+              : 'Unknown Date',
+
+            // dynamically fetched jira ticket link
+            link: `https://gripinvest.atlassian.net/browse/${ticket.key}`, // Jira ticket link
+            issuetype: fields.issuetype?.name ?? 'Unknown Issue Type',
+
+            // Fetch Story Points (handling multiple values)
+            story_point:
+              Object.entries(fields).find(
+                ([key, value]) =>
+                  key.includes('customfield') &&
+                  key.endsWith('10028') &&
+                  typeof value === 'number',
+              )?.[1] ?? 'Not Estimated',
+
+            // Fetch Sprint (handling multiple sprints)
+            sprint: (() => {
+              const sprintField = Object.entries(fields).find(
+                ([key]) => key.includes('customfield') && key.endsWith('10020'),
+              )?.[1];
+
+              if (Array.isArray(sprintField)) {
+                return sprintField.map((s) =>
+                  s?.name ? s.name : 'Unknown Sprint',
+                );
+              } else if (
+                sprintField &&
+                typeof sprintField === 'object' &&
+                'name' in sprintField
+              ) {
+                return [sprintField.name];
+              }
+              return ['No Sprint'];
+            })(),
+
+            rootcause,
+            // Fetch Root Cause dynamically
+            // rootcause: Object.entries(fields)
+            //   .find(([key, value]) => key.toLowerCase().includes('customfield') && key.endsWith('10076') && typeof value === 'string')?.[1] ?? 'No Root Cause',
+          };
+        });
+
+        total = response.data.total;
+        allTickets = [...allTickets, ...issues];
+        startAt += maxResults;
+
+        this.logger.log(`Fetched ${allTickets.length}/${total} tickets.`);
+      } catch (error) {
+        this.logger.error(`Error fetching Jira tickets: ${error.message}`);
+        console.log('Error detail:', error.response?.data || error);
+        return { issues: [] };
+      }
+    }
+
+    this.logger.log(
+      `Successfully fetched ${allTickets.length} new/updated tickets.`,
+    );
+
+    // Send fetched tickets to FastAPI for storage
+    await this.sendToWeaivate(allTickets);
+
+    // Update last fetch time
+    this.lastFetchTime = new Date().toISOString();
+
+    return { issues: allTickets };
+  }
 }
+
+// If NestJS is restarted, lastFetchTime resets. You can store it in a database or Redis for persistence.
+
+// this scheduled function runs automatically once a day and does not receive an external request, we don’t need to pass a DTO explicitly.
+// @Cron(CronExpression.EVERY_10_MINUTES) // Runs every 10 minutes.
+
+// This cron job will run at 3 AM IST (9:30 PM UTC) daily
+//@Cron('30 21 * * *')
