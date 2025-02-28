@@ -1,12 +1,14 @@
-# uvicorn fastapi_server:app --host 0.0.0.0 --port 5001 --reload
+# uvicorn fastapi_server:app --host 0.0.0.0 --port 5000 --reload
 
 
 from fastapi import FastAPI, HTTPException, Request
 from feedback import router as feedback_router
 from weaviate_client import store_tickets_batch, search_tickets, generate_response
+from functools import lru_cache
 from pydantic import BaseModel
 from pydantic import Field
 from typing import List, Union,Optional
+
 import asyncio
 import logging
 
@@ -96,6 +98,7 @@ class UserQuery(BaseModel):
 processed_queryies = set()
 @app.post("/query")
 
+@lru_cache(maxsize=100)
 async def process_query(request: UserQuery):
     query_text= request.query.strip().lower()
 

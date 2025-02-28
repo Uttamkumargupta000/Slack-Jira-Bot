@@ -3,6 +3,7 @@
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import weaviate
 from weaviate.auth import AuthApiKey
+from reranker import rerank
 import openai
 import os
 import logging
@@ -191,7 +192,7 @@ def search_tickets(query):
                 "DemoTicket",
                 ["ticket_id", "key", "summary","description", "status", "assign", "update", "created_at","link", "issuetype","storypoint", "sprint", "rootcause"]
             )
-            .with_near_vector({"vector": embedding_vector})  # Use flat list
+            .with_near_vector({"vector": embedding_vector}).with_near_text({"concept": [query], "certainty":0.75})
             # .with_limit(50)
             # .with_after("cursor_id")
             .do()
@@ -200,6 +201,8 @@ def search_tickets(query):
         # Extract and format results
         results = response.get('data', {}).get('Get', {}).get('DemoTicket', [])
         
+        if results:
+            results= rerank(results, query)
         if not results:
             return "No relevant Jira tickets found."
 
@@ -287,6 +290,8 @@ def generate_response(context, user_query):
 
                          **Core Responsibilities:**
                             - Understand user queries **before responding**.
+                            - Prioritize tickets by update date (descending order)
+                            - Filter based on exact issue types.
                             - Retrieve **only relevant tickets** (filtered by ID, status, type, sprint, date, etc.).
                             - Format responses **clearly and professionally**.
                             - Learn from mistakes and **improve over time**.
