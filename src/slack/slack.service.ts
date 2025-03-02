@@ -18,7 +18,7 @@ export class SlackService {
     const token = this.configService.get<string>('SLACK_BOT_TOKEN');
     this.slackClient = new WebClient(token);
     // const fastapiUrl = this.configService.get<string>('FASTAPI_URL')!;
-    this.fastApiUrl = `http://localhost:5001/query`;
+    this.fastApiUrl = `http://localhost:5000/query`;
   }
 
   async sendMessage(channel: string, text: string) {
