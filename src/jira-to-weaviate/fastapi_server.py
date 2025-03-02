@@ -5,9 +5,10 @@ from fastapi import FastAPI, HTTPException, Request
 from feedback import router as feedback_router
 from weaviate_client import store_tickets_batch, search_tickets, generate_response
 from functools import lru_cache
-from pydantic import BaseModel
-from pydantic import Field
-from typing import List, Union,Optional
+from pydantic import BaseModel, Field
+from typing import List, Union, Optional
+from fastapi.encoders import jsonable_encoder
+from aiocache import cached, SimpleMemoryCache
 
 import asyncio
 import logging
@@ -16,7 +17,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 app = FastAPI()
-app.include_router(feedback_router)
+# app.include_router(feedback_router)
 
 # Define Data Model for Jira Tickets
 class JiraTicket(BaseModel):
@@ -95,39 +96,61 @@ async def store_tickets(request: Request, tickets: List[JiraTicket]):
 class UserQuery(BaseModel):
     query: str
 
+    def __hash__(self):
+        return hash((self.query,))
+
+    def __eq__(self, other):
+        return self.query == other.query
+
 processed_queryies = set()
 @app.post("/query")
 
-@lru_cache(maxsize=100)
+
+@cached(ttl=100, cache= SimpleMemoryCache)
 async def process_query(request: UserQuery):
     query_text= request.query.strip().lower()
 
     if query_text in processed_queryies:
         logging.info(f"Duplicate query detected : {query_text}, Ignoring ")
         return {"response": "Duplicate request detected No additionl Response provided"}
-    
     # removed the old queryies
     processed_queryies.add(query_text)
     asyncio.create_task(remove_old_query(query_text))
 
-
     try:
         logging.info(f"Received query: {request.query}")
+        print(f"Query: {query_text}")
 
         # retrived jira ticket using weaviate
-        retrived_data = search_tickets(query_text)
+        retrived_data = await search_tickets(query_text)
+        # print(f"Retrieved Data Type: {type(retrived_data)}")
 
+        if asyncio.iscoroutine(retrived_data):
+            print("retrived_data is a coroutine. Awaiting...")
+            retrived_data = await retrived_data 
         if not retrived_data :
             return {"response": "No relevant Jira Ticket found Please refine your query"}
         
         # generating ai response 
+        logging.info("Calling AI Response...")
+        ai_response = await generate_response(retrived_data, query_text)
+        # logging.info(f"AI Response Type: {type(ai_response)}")
 
-        ai_response = generate_response(retrived_data, request.query)
+        if asyncio.iscoroutine(ai_response):
+            logging.info("Coroutine detected! Awaiting before serialization....")
+            ai_response = await ai_response
 
-        return {"response": ai_response}
+        print("9-working")
+        # return {"response": ai_response}
+        if isinstance(ai_response, str):
+            return jsonable_encoder({"response": ai_response})
+        
+        raise HTTPException(status_code=500, detail="Invalid AI Response")
+
     except Exception as e:
         logging.error(f"Error processing query: {e}")
 
 async def remove_old_query(query_text):
     await asyncio.sleep(100)
-    processed_queryies.remove(query_text)
+    if query_text in processed_queryies:
+        processed_queryies.remove(query_text)
