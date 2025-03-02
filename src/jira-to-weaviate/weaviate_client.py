@@ -1,6 +1,5 @@
 # uvicorn fastapi_server:app --host 0.0.0.0 --port 5000 --reload
 
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import weaviate
 from weaviate.auth import AuthApiKey
 from reranker import rerank
@@ -10,6 +9,7 @@ import logging
 import json
 import numpy as np
 import logging
+import asyncio
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -89,7 +89,7 @@ def generate_embedding(text: str):
         )
 
         embedding = response.data[0].embedding
-        print(embedding)
+        # print(embedding)
         return  np.array(embedding, dtype=np.float32).tolist()  # Return the correct embedding
 
     except Exception as e:
@@ -182,32 +182,33 @@ async def store_tickets_batch(tickets):
 
 
 # Use the new OpenAI client initialization
-def search_tickets(query):
+async def search_tickets(query):
     try:
         # Ensure embedding is a flat list
         embedding_vector = generate_embedding(query)  # This should return a flat list
 
-        response = (
+        query = (
             client.query.get(
                 "DemoTicket",
                 ["ticket_id", "key", "summary","description", "status", "assign", "update", "created_at","link", "issuetype","storypoint", "sprint", "rootcause"]
             )
-            .with_near_vector({"vector": embedding_vector}).with_near_text({"concept": [query], "certainty":0.75})
-            # .with_limit(50)
-            # .with_after("cursor_id")
+            .with_near_vector({"vector": embedding_vector})
+            # .with_near_text({"concept": [query], "certainty":0.75})
+            .with_sort({"path":["update"], "order":"desc"})
             .do()
         )
 
-        # Extract and format results
-        results = response.get('data', {}).get('Get', {}).get('DemoTicket', [])
-        
-        if results:
-            results= rerank(results, query)
-        if not results:
-            return "No relevant Jira tickets found."
+        # response = await query.do()
 
-        formatted_results = "\n".join([
-            (
+        # Extract and format results
+        results = query.get('data', {}).get('Get', {}).get('DemoTicket', [])
+
+        if not results:
+            return []
+        formatted_results = []
+        for item in results:
+        # formatted_results = "\n".join([
+            ({
                 f"  Ticket ID: {item.get('ticket_id', 'Not Available')}\n"
                 f"- Key: {item.get('key', 'N/A')}\n"
                 f"  Summary: {item.get('summary', 'No Summary Provided')}\n"
@@ -221,9 +222,9 @@ def search_tickets(query):
                 f"  Story Point: {str(item.get('storypoint')) if item.get('storypoint') else 'Not Estimated'}\n"
                 f"  Sprint: {', '.join(item.get('sprint', ['No Sprint Assigned'])) if isinstance(item.get('sprint'), list) else item.get('sprint', 'No Sprint Assigned')}\n"
                 f"  Root Cause {item.get('rootcause', 'No Root Cause Identified') if item.get('rootcause') else 'No Root Cause Identified'}\n"
-            )
-            for item in results
-        ])
+            })
+            # for item in results
+        # ])
 
         return formatted_results
 
@@ -260,9 +261,7 @@ def search_tickets(query):
 #     except Exception as e:
 #         return f"Error generating AI response: {str(e)}"
 
-def generate_response(context, user_query):
-
-
+async def generate_response(context, user_query):
     # Uses RAG by providing retrieved Jira ticket data as context to OpenAI's GPT-4.
     openai.api_key = OPENAI_API_KEY 
 
@@ -279,32 +278,47 @@ def generate_response(context, user_query):
     is_asking_for_ids = any(phrase in user_query.lower() for phrase in 
                           ["ticket id", "ticket number", "jira id", "ticket key", "jira key"])
     
+    reranked_tickets = await rerank(context, user_query)
+    ticket_summaries = "\n".join([f"- {ticket['summary']}" for ticket in reranked_tickets])
     # Call OpenAI's GPT-4o mini with context and user query
     try:
         client = openai.OpenAI()
-        response = client.chat.completions.create(
+        response =  client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {
-                    "role": "system", "content": """You are a **JIRA Ticket Assistant for Slack**, designed to help users retrieve and summarize Jira ticket information efficiently.
+                    "role": "system", "content": r"""You are a **JIRA Ticket Assistant for Slack**, designed to help users retrieve and summarize Jira ticket information efficiently.
 
-                         **Core Responsibilities:**
-                            - Understand user queries **before responding**.
-                            - Prioritize tickets by update date (descending order)
-                            - Filter based on exact issue types.
-                            - Retrieve **only relevant tickets** (filtered by ID, status, type, sprint, date, etc.).
-                            - Format responses **clearly and professionally**.
+                         ### 🎯 Core Responsibilities:
+                            - Understand user queries before responding.
+                            - Dynamically search and retrieve **only relevant Jira tickets** from the Weaviate database.
+                            - Filter tickets by **sprint, issue type, status, or date range**.
+                            - Prioritize tickets by **last updated date (descending order)**.
+                            - Format responses with **Markdown for Slack**.
+                            - Ask clarifying questions if the query is ambiguous.
                             - Learn from mistakes and **improve over time**.
 
-                            ### 📌 **Response Guidelines:**
-                            #### ✅ 1. **Understand the Query Before Responding**
+                            📌 **Response Guidelines:**
+                            ####✅ 1. **Understand the Query Before Responding**
+                            - If the query is unclear, **ask a clarifying question** instead of making assumptions.
                             - Determine if the user is requesting:
                             - Specific ticket details **(by ID or key)**.
                             - A summary of multiple tickets.
                             - General status updates, sprint details, issue types, or story points.
                             - Prioritize *relevant* tickets based on query keywords.
-                            - If the query is unclear, **ask a clarifying question** instead of making assumptions.
 
+                            
+                            #### ✅ 2. **Retrieve and Filter Tickets Dynamically**
+                            - Search the **Weaviate database** using vector embeddings and hybrid search.
+                            - Apply **exact filters** for:
+                                - Ticket IDs
+                                - Sprints
+                                - Issue types
+                                - Story points
+                                - Status
+                            - If no tickets match, return:  
+                                `"No tickets match your criteria. Please refine your search."`
+  
                             #### ✅ 2. **Filter and Sort Tickets Correctly**
                             - **Strictly filter tickets by the requested date range** (e.g., "last month" → only tickets updated/created in the last month of the current year).
                             - **Sort by last updated date (descending)** to show the most recent tickets first.
@@ -328,6 +342,10 @@ def generate_response(context, user_query):
                             \`\`\`
 
                             #### ✅ 5. **Strictly Follow User Query Criteria**
+                            - You **must not** return the entire Jira database.
+                            - If users ask for the **entire database**, reply:
+                                `"I am restricted to returning only relevant Jira tickets based on your query."`
+
                             - Only return tickets **matching the exact issue type requested**.
                             - Do **not** include irrelevant issue types.  
                             - **Example:** If the user asks for **Incidents related to KYC**, return only tickets where **Issue Type = Incident**.
@@ -342,19 +360,27 @@ def generate_response(context, user_query):
                             Instead of returning an empty response, guide the user:
                             - "No tickets match your criteria. You can try adjusting the **date range, issue type, or keywords**."
 
+
+                            ### Important Notes:
+                            - Always prioritize the **most recent tickets**.
+                            - Do not assume missing information.
+                            - Only fetch tickets 
+
                                                     
                 """  
                 },
                 {"role": "user", "content": f"""
                 User Query: {user_query}    
                 
-                Relevant Tickets:
-                {context}
+                \nRelevant Tickets:
+                \n{reranked_tickets}
                 """}
             ]
         )
         
-        return response.choices[0].message.content
+        result = response.choices[0].message.content
+        
+        return result
     except Exception as e:
         return f"Error generating AI response: {str(e)}"
 
