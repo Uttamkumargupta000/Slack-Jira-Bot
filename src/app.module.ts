@@ -7,7 +7,8 @@ import { JiraModule } from './jira/jira.module';
 import { HttpModule } from '@nestjs/axios';
 
 @Module({
-  imports: [HttpModule,
+  imports: [
+    HttpModule,
     SlackModule,
     JiraModule,
     ConfigModule.forRoot({
@@ -16,6 +17,6 @@ import { HttpModule } from '@nestjs/axios';
   ],
   controllers: [AppController],
   providers: [AppService],
-  exports: []
+  exports: [],
 })
 export class AppModule {}
