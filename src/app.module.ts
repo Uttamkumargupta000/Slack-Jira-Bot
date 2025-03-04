@@ -8,7 +8,8 @@ import { HttpModule } from '@nestjs/axios';
 import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
-  imports: [HttpModule,
+  imports: [
+    HttpModule,
     SlackModule,
     JiraModule,
     ScheduleModule.forRoot(),
@@ -18,6 +19,6 @@ import { ScheduleModule } from '@nestjs/schedule';
   ],
   controllers: [AppController],
   providers: [AppService],
-  exports: []
+  exports: [],
 })
 export class AppModule {}
