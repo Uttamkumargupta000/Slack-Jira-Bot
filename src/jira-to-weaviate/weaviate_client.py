@@ -154,7 +154,11 @@ async def store_tickets_batch(tickets):
                     # Store ticket in Weaviate
                     batch.add_data_object(
                         ticket,  # Stores entire ticket JSON
+<<<<<<< HEAD
                         class_name="DemoTicket",
+=======
+                        class_name="JiraSlack2",
+>>>>>>> parent of ccd39f9 (added authentication key of ngrok)
                         vector=embedding  # Store entire ticket embedding
                     )
                     logging.info(ticket)
@@ -189,7 +193,11 @@ async def search_tickets(query):
 
         query = (
             client.query.get(
+<<<<<<< HEAD
                 "DemoTicket",
+=======
+                "JiraSlack2",
+>>>>>>> parent of ccd39f9 (added authentication key of ngrok)
                 ["ticket_id", "key", "summary","description", "status", "assign", "update", "created_at","link", "issuetype","storypoint", "sprint", "rootcause"]
             )
             .with_near_vector({"vector": embedding_vector})
@@ -198,7 +206,15 @@ async def search_tickets(query):
             .do()
         )
 
+<<<<<<< HEAD
         # response = await query.do()
+=======
+        # Extract and format results
+        results = response.get('data', {}).get('Get', {}).get('JiraSlack2', [])
+        
+        if not results:
+            return "No relevant Jira tickets found."
+>>>>>>> parent of ccd39f9 (added authentication key of ngrok)
 
         # Extract and format results
         results = query.get('data', {}).get('Get', {}).get('DemoTicket', [])

@@ -7,7 +7,6 @@ import {
 } from './dto/fetch-jira.dto';
 import { lastValueFrom } from 'rxjs';
 import {Cron, CronExpression } from '@nestjs/schedule';
-import { json } from 'stream/consumers';
 
 @Injectable()
 export class JiraService {
@@ -20,19 +19,19 @@ export class JiraService {
 
   constructor(private httpService: HttpService) {
     this.JIRA_BASE_URL = process.env.JIRA_BASE_URL!;
-
+    
     this.JIRA_AUTH = {
       username: process.env.JIRA_USERNAME as string,
       password: process.env.JIRA_API_TOKEN as string,
     };
   }
-
+  
   //Fetching all the ticket
   async fetchJiraALLTickets(dto: FetchJiraDto): Promise<JiraResponseDto> {
     let { startAt = 0, maxResults = 100 } = dto;
     let allTickets: any[] = [];
     let total = 1;
-    while (startAt < total ) {
+    while (startAt < total && allTickets.length <100) {
       try {
         const response = await lastValueFrom(
           this.httpService.get(`${this.JIRA_BASE_URL}/search`, {
@@ -69,21 +68,10 @@ export class JiraService {
           return 'Invalid Description Format'; // Fallback
         };
 
-        // const issues = response.data.issues.map((ticket) => ({
-        //   id: ticket.id?.toString(),  // Ensure ID is a string
-        //   key: ticket.key?.toString(),
-        //   summary: ticket.fields?.summary ?? 'No Summary',
-        //   description: extractTextFromDescription(ticket.fields?.description) || 'No Description',
-        //   status: ticket.fields?.status?.name ?? 'Unknown Status',
-        //   assign: ticket.fields?.assignee?.displayName ?? 'Unassigned',  // Renamed for FastAPI compatibility
-        //   created_at: ticket.fields?.created ? new Date(ticket.fields.created).toISOString() : 'Unknown Date',
-        //   update: ticket.fields?.updated ? new Date(ticket.fields.updated).toISOString() : 'Unknown Date',
-        // }));
-
         const issues = response.data.issues.map((ticket) => {
           const fields = ticket.fields || {}; // Ensure fields exist
           const rootCauseEntry = Object.entries(fields).find(
-            ([key, value]) =>
+            ([key]) =>
               key.includes('customfield') && key.endsWith('10076'),
           );
           // setting the default value 
@@ -152,7 +140,6 @@ export class JiraService {
               }
               return ['No Sprint'];
             })(),
-
             rootcause,
           };
         });
@@ -162,16 +149,14 @@ export class JiraService {
         total = response.data.total;
         allTickets = [...allTickets, ...issues];
         
-        // if (allTickets.length >= 100) {
-        //   allTickets = allTickets.slice(0, 100);
-        //   break;
-        // }
+        if (allTickets.length >= 100) {
+          allTickets = allTickets.slice(0, 100);
+          break;
+        }
         console.log("Responses : ",response);
         startAt += maxResults;
 
         console.log(`Fetched ${issues.length} new tickets, total collected : ${allTickets.length}`);
-
-        
         
         this.logger.log(`Fetched ${allTickets.length}/${total} tickets.`);
       } catch (error) {
@@ -186,13 +171,12 @@ export class JiraService {
       `Successfully Fetched tickets ${allTickets.length} tickets.`,
     );
 
-    // send fetched tickets to Fastapi for weaviate storeage
+    // send fetched tickets to Fastapi for weaviate storage
     await this.sendToWeaivate(allTickets);
     return { issues: allTickets };
   }
 
   // Send jira tickets to the fastapi server for storage in weaviate
-
   async sendToWeaivate(tickets: any[]) {
     try {
       this.logger.log(`Sending ${tickets.length} tickets to FastAPI...`);
@@ -218,6 +202,8 @@ export class JiraService {
       );
     }
   }
+
+
 
   // Fetch New & Updated Tickets Automatically Every Day
   // @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT) // Runs at midnight daily
