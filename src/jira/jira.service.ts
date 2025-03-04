@@ -58,7 +58,7 @@ export class JiraService {
           if (!description) return 'No Description';
 
           if (typeof description === 'string') {
-            return description; // Already a plain string
+            return description; 
           }
 
           if (description?.content && Array.isArray(description.content)) {
@@ -71,7 +71,7 @@ export class JiraService {
               .join('\n');
           }
 
-          return 'Invalid Description Format'; // Fallback
+          return 'Invalid Description Format';
         };
 
         const issues = response.data.issues.map((ticket) => {
