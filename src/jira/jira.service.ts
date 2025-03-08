@@ -13,6 +13,7 @@ import {
 } from './dto/fetch-jira.dto';
 import { lastValueFrom } from 'rxjs';
 import {Cron, CronExpression } from '@nestjs/schedule';
+import { MySqlService } from 'src/jira-to-mysql/mysql.services';
 
 @Injectable()
 export class JiraService {
@@ -23,7 +24,7 @@ export class JiraService {
   private JIRA_AUTH: { username: string; password: string };
   private isFetching = false;
 
-  constructor(private httpService: HttpService) {
+  constructor(private httpService: HttpService, private readonly mySqlService: MySqlService) {
     this.JIRA_BASE_URL = process.env.JIRA_BASE_URL!;
     
     this.JIRA_AUTH = {
@@ -37,7 +38,7 @@ export class JiraService {
     let { startAt = 0, maxResults = 100 } = dto;
     let allTickets: any[] = [];
     let total = 1;
-    while (startAt < total && allTickets.length <100) {
+    while (startAt < total ) {
       try {
         const response = await lastValueFrom(
           this.httpService.get(`${this.JIRA_BASE_URL}/search`, {
@@ -155,10 +156,10 @@ export class JiraService {
         total = response.data.total;
         allTickets = [...allTickets, ...issues];
         
-        if (allTickets.length >= 100) {
-          allTickets = allTickets.slice(0, 100);
-          break;
-        }
+        // if (allTickets.length >= 50) {
+        //   allTickets = allTickets.slice(0, 50);
+        //   break;
+        // }
         console.log("Responses : ",response);
         startAt += maxResults;
 
@@ -178,34 +179,28 @@ export class JiraService {
     );
 
     // send fetched tickets to Fastapi for weaviate storage
-    await this.sendToWeaivate(allTickets);
+    await this.sendToDatabase(allTickets);
     return { issues: allTickets };
   }
 
   // Send jira tickets to the fastapi server for storage in weaviate
-  async sendToWeaivate(tickets: any[]) {
+  async sendToDatabase(tickets: any[]) {
     try {
-      this.logger.log(`Sending ${tickets.length} tickets to FastAPI...`);
+      this.logger.log(`Sending ${tickets.length} tickets to MySQl...`);
       for (const ticket of tickets) {
         if (typeof ticket.description === 'object') {
           ticket.description = JSON.stringify(ticket.description);
         }
 
         console.log("fast api pr bhej raha hu")
-        const response = await lastValueFrom(
-          this.httpService.post(`${this.FASTAPI_URL}/store-tickets`, [ticket], {
-            headers: { 'Content-Type': 'application/json' },
-          }),
-        );
-        this.logger.log(
-          `Response from FastAPI: ${JSON.stringify(response.data)}`,
-        );
+        
+        await this.mySqlService.saveTicket(ticket);
+        
+        console.log(`Sending ticket to MySQL:, ${ticket.key}`);
       }
-      this.logger.log(`sent ${tickets.length} tickets to Weaviate`);
+      this.logger.log(`Sucessfully sent ${tickets.length} tickets to MySQl`);
     } catch (error) {
-      this.logger.error(
-        `Error sending the tickets to Weaviate: ${error.message}`,
-      );
+      this.logger.error(`Error saving tickets to MySQL: ${error.message}`);
     }
   }
 
@@ -428,7 +423,7 @@ export class JiraService {
     );
 
     // Send fetched tickets to FastAPI for storage
-    await this.sendToWeaivate(allTickets);
+    await this.sendToDatabase(allTickets);
 
     // Update last fetch time
     this.lastFetchTime = new Date().toISOString();
