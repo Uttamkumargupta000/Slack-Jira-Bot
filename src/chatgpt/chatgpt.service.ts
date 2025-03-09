@@ -16,24 +16,39 @@ export class ChatGptService {
     userQuery: string,
   ): Promise<{ sqlQuery?: string; message?: string; jqlQuery?:string; jiraSearchLink?: string }> {
     try {
+
+      // Security : Block dangerous operations like DELETE OR DROP
+      if(this.isRestrictedQuery(userQuery)){
+        return{message: "This Operation is not allowed for security reasons"};
+      }
       const response = await this.openai.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [
           {
             role: 'user',
-            content: `Convert the following into a SQL query that only searches within a table structured like this:\n\n
+            content: `Analyze the following user query and generate an SQL query that searches within this table:\n\n
             Table Name: tickets\n
             Columns: id, key, summary, description, status, assign, link, created_at, update, issuetype, storypoint, sprint, rootcause\n\n
             Identify keywords like 'sprint', 'KYC', 'GC', 'demat', 'last X days', specific ticket IDs (e.g., PT-28940), or creation dates.
         
-            **Important rules for sprint queries:**
-            - If the user mentions a sprint number (e.g., "Sprint 100"), always format it as **sprint = 'Sprint 100'**.
-            - If the user only mentions a number (e.g., "100"), assume it refers to a sprint and convert it to **sprint = 'Sprint 100'**.
+            **Important Rules:**  
+            - If the user mentions a sprint (e.g., "Sprint 100"), always format it as **sprint = 'Sprint 100'**.  
+            - If the user only provides a number (e.g., "100"), assume it refers to a sprint and convert it to **sprint = 'Sprint 100'**.  
+            - When querying dates, use **DATE(created_at) = 'YYYY-MM-DD'** instead of direct equality checks.  
+            - If the user asks for a count (e.g., "How many tickets in Sprint 100?"), generate a **COUNT query**.  
+            - If the user asks for specific ticket details (e.g., "Details of PT-28940"), fetch all relevant columns.
         
-            Ensure the query:
-            - Retrieves the **top 10** most recent results (ORDER BY created_at DESC LIMIT 10)
-            - If more than 10 results exist, provide a Jira search link using a JQL query for the remaining results.
+            **Ensure the Query:**  
+            - Retrieves the **top 10** most recent results (**ORDER BY created_at DESC LIMIT 10**) for general searches.  
+            - If the query requires a count, return the total number of matching records.  
+            - If more than 10 results exist, provide a Jira search link using a JQL query.
             - Generate only the SQL query without any additional text.
+
+            **SECURITY RULES:**  
+            -  **NEVER generate DELETE, DROP, or TRUNCATE queries.**  
+            -  **NEVER allow full table dumps (e.g., "Show me all tickets").**  
+            -  If the user asks for a **count**, return only the COUNT.  
+            -  If more than 10 results exist, provide a Jira search link instead.
         
             **User Query:** "${userQuery}"`,
           },
@@ -46,6 +61,11 @@ export class ChatGptService {
 
       // Fix: Remove Markdown formatting
       chatResponse = chatResponse.replace(/```sql|```/g, '').trim();
+
+      // restrict unsafe Queries
+      if(this.isRestrictedSQL(chatResponse)){
+        return{message: "This Query is Not allowed due to security reasons"};
+      }
       // Check for the correct response contains an actual query
       if (chatResponse === 'NOT_SQL') {
         return { message: 'Not a valid Question, Please Refine your Query' };
@@ -59,6 +79,29 @@ export class ChatGptService {
       console.error('Error generating response with OpenAI:', error);
       throw new Error('Failed to generate response');
     }
+  }
+
+  private isRestrictedQuery(userQuery: string): boolean {
+    const restrictedPatterns = [
+      /\bdelete\b/i,
+      /\bdrop\b/i,
+      /\btruncate\b/i,
+      /\bremove\b/i,
+      /\bshow all tickets\b/i,
+      /\bfetch all tickets\b/i,
+      /\bexport all data\b/i,
+    ];
+    return restrictedPatterns.some((pattern) => pattern.test(userQuery));
+  }
+
+  private isRestrictedSQL(sqlQuery: string): boolean {
+    const restrictedPatterns = [
+      /\bDELETE\b/i,
+      /\bDROP\b/i,
+      /\bTRUNCATE\b/i,
+      /\bSELECT \*\b/i, // Prevents full table dumps
+    ];
+    return restrictedPatterns.some((pattern) => pattern.test(sqlQuery));
   }
 
   private isValidSQL(query: string): boolean {
@@ -83,14 +126,33 @@ export class ChatGptService {
   // format raw Sql Query results into a human readable repsonse using chatGpt.
   async formatResponse(queryResult: any, userQuery: string): Promise<string> {
     try {
+      let sprintDetails = '';
+    let isSprintQuery = /sprint\s+\d+/i.test(userQuery); // Check if the query is for a sprint summary
+
+    if (isSprintQuery) {
+      // If it's a sprint summary request, combine relevant ticket details
+      sprintDetails = queryResult
+        .map(
+          (ticket: any) =>
+            `🆔 *${ticket.key}* - ${ticket.summary}\n  📝 ${ticket.description}\n  🏷 Issue Type: ${ticket.issue_type}\n  🎯 Story Point: ${ticket.story_point ?? 'N/A'}\n  🔍 Root Cause: ${ticket.root_cause ?? 'Not specified'}\n  👤 Assigned To: ${ticket.assign ?? 'Unassigned'}\n`
+        )
+        .join('\n');
+
+      userQuery = `Summarize the following Jira tickets for the given sprint:${sprintDetails}`;
+    }
       const response = await this.openai.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [
           {
             role: 'user',
             content: `Format the following SQL result into a structured response including Ticket ID, Key, Summary, Status, Assigned To, Created At, Updated At, and Link in a clean markdown format:
-
-            Also, if the user is asking for a summary of a specific row, fetch relevant ticket details and summarize the entire timeline, starting from when it was created, first assigned, and last updated.
+  
+            - If it's about **a specific ticket**, summarize its details, status, and history.
+            - If the query is for a sprint summary, analyze all ticket descriptions, summaries, and statuses together and provide a consolidated sprint summary.  
+            - Include ticket details like ID, summary, assigned to, created_at, and updated_at.  
+            - If the user asks for a count (e.g., "How many tickets in Sprint 100?"), return **just the total number**.
+            - If the user asks for a specific ticket (e.g., "Details of PT-28940"), provide a **detailed summary**.
+            - If the user asks about a sprint, summarize all related tickets.\n
             
             Query: "${userQuery}"
             SQL Result: ${JSON.stringify(queryResult)}`,
@@ -100,7 +162,7 @@ export class ChatGptService {
       const rawResponse =
         response.choices[0].message.content ?? 'No Response From OpenAI';
 
-      return this.formatStructuredResponse(queryResult, rawResponse);
+      return isSprintQuery? rawResponse: this.formatStructuredResponse(queryResult, rawResponse);
     } catch (error) {
       console.error('Error formatting response with OpenAI:', error);
       throw new Error('Failed to format response');
@@ -114,11 +176,14 @@ export class ChatGptService {
     if (!queryResult || queryResult.length === 0) {
       return '*No matching Jira tickets found.*';
     }
+    if (typeof queryResult === 'number') {
+      return ` *Total Tickets:* ${queryResult}`;
+    }
 
     const formattedTickets = queryResult.slice(0,10)
       .map(
         (ticket: any, index: number) =>
-          `🔹 **Ticket ${index + 1}:**  
+          `🔹 *Ticket ${index + 1}:*  
       🆔 *Ticket ID:* ${ticket.id}  
       🔑 *Key:* ${ticket.key}  
       📝 *Summary:* ${ticket.summary}  
