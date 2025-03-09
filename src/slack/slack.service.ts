@@ -24,6 +24,7 @@ export class SlackService {
   // Sends a message to a slack channel
   async sendMessage(channel: string, text: string) {
     try {
+      console.log(`Sending message to channel :${channel} | Message: ${text}`)
       const response = await this.slackClient.chat.postMessage({
         channel,
         text,
@@ -39,6 +40,7 @@ export class SlackService {
   // Handles slack user query, process then via chatgpt, executes SQL Queries, format result, and send the response back to the chaneel
   async handleUserQuery(channel: string, userMessage: string) {
     try {
+      console.log(`Debug for : processing message from user in channel : ${channel}`)
       console.log(`Processing user message to Chatgpt : ${userMessage}`);
 
       // const formattedMessage = userMessage.trim();
@@ -54,7 +56,12 @@ export class SlackService {
       // const botResponse = fastApiResponse.data.response;
 
       // Generate SQL Query using ChatGpt
-      const {sqlQuery, message} = await this.chatGptServices.generateSQLQuery(userMessage);
+      
+      const {sqlQuery, message, jqlQuery, jiraSearchLink} = await this.chatGptServices.generateSQLQuery(userMessage);
+      if (!sqlQuery) {
+        console.log(` SQL Query Not Generated. Response: ${message}`);
+        return await this.sendMessage(channel, message ?? 'Unable to process request.');
+      }
       
       // If no valid sql is generated, return the message 
       if (!sqlQuery) {
@@ -68,14 +75,18 @@ export class SlackService {
 
       // if no data is found, provide an alternative message
       if (!queryResult || queryResult.length === 0) {
-        return await this.sendMessage(channel, "No relevant data found in the database.");
+        console.log(`Warning No data found for Query : ${sqlQuery}`)
+        return await this.sendMessage(channel, `No relevant data found. Try searching Jira : ${jiraSearchLink}`);
       }
 
       // Format the SQL Query Result using ChatGpt
-      const formattedMessage = await this.chatGptServices.formatResponse(queryResult);
+      const formattedMessage = await this.chatGptServices.formatResponse(queryResult, userMessage);
+      const responseMessage = `📌 **Jira Ticket Results**\n\n${formattedMessage}\n\n🔍 **JQL Query Used:** \`${jqlQuery}\`\n🔗 **More Results:** ${jiraSearchLink}`
+      
+      console.log(`Debug : sending formatted response to channel: ${channel}`)
 
       // Send formatted response to Slack
-      return await this.sendMessage(channel, formattedMessage);
+      return await this.sendMessage(channel, responseMessage);
     } catch (error) {
       console.error('Error handling Slack event : ', error);
       // send failure message to Slack
