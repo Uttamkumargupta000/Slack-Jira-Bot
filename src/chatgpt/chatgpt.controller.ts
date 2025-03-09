@@ -14,7 +14,7 @@ export class ChatGptController {
   }
 
   @Post('format-response')
-  async formatResponse(@Body('result') queryResult: any): Promise<string> {
-    return await this.chatGptService.formatResponse(queryResult)
+  async formatResponse(@Body('result') queryResult: any, @Body('query') userQuery: string): Promise<string> {
+    return await this.chatGptService.formatResponse(queryResult, userQuery)
   }
 }
