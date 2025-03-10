@@ -49,7 +49,7 @@ export class ChatGptService {
             - If more than 10 results exist, provide a Jira search link using a JQL query.
             - Generate only the SQL query without any additional text.
             - Ignore case sensitivity. Provide data which user asks for regardless of case sensitivity.
-            - If query is for sprint summary then analyze all theh tickets present in taht sprint and give a collective summary for all the ticktes.
+            - If query is for sprint summary then analyze all the tickets present in the sprint and give a collective summary for all the ticktes.
 
             **SECURITY RULES:**  
             -  **NEVER generate DELETE, DROP, or TRUNCATE queries.**  
