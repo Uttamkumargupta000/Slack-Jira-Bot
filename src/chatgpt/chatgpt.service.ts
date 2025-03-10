@@ -14,12 +14,18 @@ export class ChatGptService {
   // Converts a Natural language user query into sql query using Chatgpt.
   async generateSQLQuery(
     userQuery: string,
-  ): Promise<{ sqlQuery?: string; message?: string; jqlQuery?:string; jiraSearchLink?: string }> {
+  ): Promise<{
+    sqlQuery?: string;
+    message?: string;
+    jqlQuery?: string;
+    jiraSearchLink?: string;
+  }> {
     try {
-
       // Security : Block dangerous operations like DELETE OR DROP
-      if(this.isRestrictedQuery(userQuery)){
-        return{message: "This Operation is not allowed for security reasons"};
+      if (this.isRestrictedQuery(userQuery)) {
+        return {
+          message: 'This Operation is not allowed for security reasons',
+        };
       }
       const response = await this.openai.chat.completions.create({
         model: 'gpt-4o-mini',
@@ -39,7 +45,6 @@ export class ChatGptService {
             - If the user asks for specific ticket details (e.g., "Details of PT-28940"), fetch all relevant columns.
         
             **Ensure the Query:**  
-            - Retrieves the **top 10** most recent results (**ORDER BY created_at DESC LIMIT 10**) for general searches.  
             - If the query requires a count, return the total number of matching records.  
             - If more than 10 results exist, provide a Jira search link using a JQL query.
             - Generate only the SQL query without any additional text.
@@ -53,7 +58,6 @@ export class ChatGptService {
             **User Query:** "${userQuery}"`,
           },
         ],
-        
       });
       let chatResponse =
         response.choices[0].message.content?.trim() ??
@@ -63,14 +67,14 @@ export class ChatGptService {
       chatResponse = chatResponse.replace(/```sql|```/g, '').trim();
 
       // restrict unsafe Queries
-      if(this.isRestrictedSQL(chatResponse)){
-        return{message: "This Query is Not allowed due to security reasons"};
+      if (this.isRestrictedSQL(chatResponse)) {
+        return { message: 'This Query is Not allowed due to security reasons' };
       }
       // Check for the correct response contains an actual query
       if (chatResponse === 'NOT_SQL') {
         return { message: 'Not a valid Question, Please Refine your Query' };
       } else if (this.isValidSQL(chatResponse)) {
-        const jiraSearchLink = this.generateJiraSearchLink(chatResponse)
+        const jiraSearchLink = this.generateJiraSearchLink(chatResponse);
         return { sqlQuery: chatResponse, jiraSearchLink };
       } else {
         return { message: chatResponse };
@@ -119,7 +123,9 @@ export class ChatGptService {
 
   // Extract relevant conditions from SQL and form JQL (simplified example)
   private generateJiraSearchLink(sqlQuery: string): string {
-    const jql = encodeURIComponent(sqlQuery.replace('SELECT * FROM tickets WHERE', '').trim());
+    const jql = encodeURIComponent(
+      sqlQuery.replace('SELECT * FROM tickets WHERE', '').trim(),
+    );
     return `https://gripinvest.atlassian.net/issues/?jql=${jql}`;
   }
 
@@ -127,19 +133,19 @@ export class ChatGptService {
   async formatResponse(queryResult: any, userQuery: string): Promise<string> {
     try {
       let sprintDetails = '';
-    let isSprintQuery = /sprint\s+\d+/i.test(userQuery); // Check if the query is for a sprint summary
+      let isSprintQuery = /sprint\s+\d+/i.test(userQuery); // Check if the query is for a sprint summary
 
-    if (isSprintQuery) {
-      // If it's a sprint summary request, combine relevant ticket details
-      sprintDetails = queryResult
-        .map(
-          (ticket: any) =>
-            `🆔 *${ticket.key}* - ${ticket.summary}\n  📝 ${ticket.description}\n  🏷 Issue Type: ${ticket.issue_type}\n  🎯 Story Point: ${ticket.story_point ?? 'N/A'}\n  🔍 Root Cause: ${ticket.root_cause ?? 'Not specified'}\n  👤 Assigned To: ${ticket.assign ?? 'Unassigned'}\n`
-        )
-        .join('\n');
+      if (isSprintQuery) {
+        // If it's a sprint summary request, combine relevant ticket details
+        sprintDetails = queryResult
+          .map(
+            (ticket: any) =>
+              `🆔 *${ticket.key}* - ${ticket.summary}\n  📝 ${ticket.description}\n  🏷 Issue Type: ${ticket.issue_type}\n  🎯 Story Point: ${ticket.story_point ?? 'N/A'}\n  🔍 Root Cause: ${ticket.root_cause ?? 'Not specified'}\n  👤 Assigned To: ${ticket.assign ?? 'Unassigned'}\n`,
+          )
+          .join('\n');
 
-      userQuery = `Summarize the following Jira tickets for the given sprint:${sprintDetails}`;
-    }
+        userQuery = `Summarize the following Jira tickets for the given sprint:${sprintDetails}`;
+      }
       const response = await this.openai.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [
@@ -162,7 +168,9 @@ export class ChatGptService {
       const rawResponse =
         response.choices[0].message.content ?? 'No Response From OpenAI';
 
-      return isSprintQuery? rawResponse: this.formatStructuredResponse(queryResult, rawResponse);
+      return isSprintQuery
+        ? rawResponse
+        : this.formatStructuredResponse(queryResult, rawResponse);
     } catch (error) {
       console.error('Error formatting response with OpenAI:', error);
       throw new Error('Failed to format response');
@@ -180,7 +188,8 @@ export class ChatGptService {
       return ` *Total Tickets:* ${queryResult}`;
     }
 
-    const formattedTickets = queryResult.slice(0,10)
+    const formattedTickets = queryResult
+      .slice(0, 10)
       .map(
         (ticket: any, index: number) =>
           `🔹 *Ticket ${index + 1}:*  
