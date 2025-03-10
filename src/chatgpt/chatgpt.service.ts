@@ -12,12 +12,9 @@ export class ChatGptService {
   }
 
   // Converts a Natural language user query into sql query using Chatgpt.
-  async generateSQLQuery(userQuery: string): Promise<{
-    sqlQuery?: string;
-    message?: string;
-    jqlQuery?: string;
-    jiraSearchLink?: string;
-  }> {
+  async generateSQLQuery(
+    userQuery: string,
+  ): Promise<{ sqlQuery?: string; message?: string; jqlQuery?:string; jiraSearchLink?: string }> {
     try {
       // Security : Block dangerous operations like DELETE OR DROP
       if (this.isRestrictedQuery(userQuery)) {
@@ -157,17 +154,38 @@ export class ChatGptService {
         messages: [
           {
             role: 'user',
-            content: `Format the following SQL result into a structured response including Ticket ID, Key, Issue Type, Summary, Status, Assigned To, Created At, Updated At, and Link in a clean markdown format:
-  
-            - If it's about **a specific ticket**, summarize its details, status, and history.
-            - If the query is for a particular sprint summary, analyze all ticket descriptions, summaries, issue types and there total count for each type, total number of tickets present in that sprint and provide a consolidated sprint summary.  
-            - If the user asks about a sprint summary, summarize all related tickets and give a short response in 10 to 15 lines .\n
-            - Include ticket details like Ticket ID, Key, Issue Type, Summary, Status, Assigned To, Created At, Updated At.  
-            - If the user asks for a count (e.g., "How many tickets in Sprint 100?"), return **just the total number of tickets present in that sprint**.
-            - If the user asks for a specific ticket (e.g., "Details of PT-28940"), provide a **detailed summary**.
-            
-            Query: "${userQuery}"
-            SQL Result: ${JSON.stringify(queryResult)}`,
+            content: `Analyze the following user query and generate an SQL query that searches within this table:\n\n
+            Table Name: tickets\n
+            Columns: id, key, summary, description, status, assign, link, created_at, update, issuetype, storypoint, sprint, rootcause\n\n
+            Identify keywords like 'sprint', 'issue type', 'KYC', 'GC', 'demat', 'last X days', specific ticket IDs (e.g., PT-28940), or creation dates.\n\n
+        
+            **Important Rules:**  \n
+            - If the user mentions a sprint (e.g., "Sprint 100"), always format it as **sprint = 'Sprint 100'**.  \n
+            - If the user mentions an issuetype (e.g., "bug, adhoc, incident, task, story"), always format it as **issuetype = 'Bug, Adhoc, Incident, Task, Story, etc.'**.\n
+            - If the user provides a number (e.g., "100") and mentions 'sprint', assume it refers to a sprint and format it as sprint = 'Sprint 100'.
+            - If the user provides a number (e.g., "0.2", "4", "0", "2.5") and mentions 'story point' or 'story points', assume it refers to story points and format it as storypoint = 0.2 (keeping the numeric value as it is). \n
+            - When querying dates, use **DATE(created_at) = 'YYYY-MM-DD'** instead of direct equality checks.  \n
+            - If the user asks for a count (e.g., "How many tickets in Sprint 100?"), generate a **COUNT query**.  \n
+            - If the user asks for specific ticket details (e.g., "Details of PT-28940"), fetch all relevant columns.\n\n
+        
+            **Ensure the Query:**  
+            - If the query requires a count, return the total number of matching records.  
+            - If more than 10 results exist, provide a Jira search link using a JQL query.
+            - Generate only the SQL query without any additional text.
+            - Ignore case sensitivity. Provide data which user asks for regardless of case sensitivity.
+            - If query is for sprint summary then analyze all the tickets present in taht sprint and give a collective summary for all the ticktes.
+
+            **SECURITY RULES:**  
+            -  **NEVER generate DELETE, DROP, or TRUNCATE queries.**  
+            -  **NEVER allow full table dumps (e.g., "Show me all tickets").**  
+            -  If the user asks for a **count**, return only the COUNT.  
+            -  If more than 10 results exist, provide a Jira search link instead.
+
+            **Additional Formatting Rules:**\n
+            - Ensure that **issuetype** values always have the first letter capitalized (e.g., "bug" → "Bug", "tech task" → "Tech Task").\n
+            - Ensure that **rootcause** values also have the first letter capitalized (e.g., "coding issue" → "Coding Issue").\n\n
+        
+            **User Query:** "${userQuery}"`,
           },
         ],
       });
