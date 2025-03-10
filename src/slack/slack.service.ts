@@ -3,6 +3,7 @@ import { WebClient } from '@slack/web-api';
 import { ConfigService } from '@nestjs/config';
 import { MySqlService } from 'src/jira-to-mysql/mysql.services';
 import { ChatGptService } from 'src/chatgpt/chatgpt.service';
+import { QueryResult } from 'typeorm';
 
 
 @Injectable()
